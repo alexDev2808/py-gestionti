@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import asyncio
 import math
-import threading
 from typing import Optional
 
 import flet as ft
@@ -311,14 +311,18 @@ class PersonalView(View):
 
         include_inactive = self._include_inactive
 
-        def worker() -> None:
+        async def load_async() -> None:
             try:
-                items = self._fetch_items(include_inactive)
+                # Ejecutar en thread pool para no bloquear
+                items = await asyncio.to_thread(
+                    self._fetch_items, include_inactive
+                )
                 error: Optional[str] = None
             except Exception as exc:  # noqa: BLE001
                 items = []
                 error = str(exc)
 
+            # Ahora estamos de vuelta en el event loop, actualizar UI
             if error is None:
                 self._all_items = list(items)
                 self._loaded = True
@@ -335,7 +339,14 @@ class PersonalView(View):
 
             self._set_progress(False)
 
-        threading.Thread(target=worker, daemon=True).start()
+        # Usar el event loop de Flet
+        try:
+            asyncio.run_coroutine_threadsafe(
+                load_async(), asyncio.get_event_loop()
+            )
+        except RuntimeError:
+            # Si no hay event loop, usar un enfoque alternativo
+            self.page.run_task(load_async)
 
     def _fetch_items(self, include_inactive: bool) -> list[PersonalResponseDTO]:
         ok, message, data = self._service.listar_personal(
