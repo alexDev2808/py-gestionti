@@ -224,54 +224,32 @@ class PersonalView(View):
 
     def _on_cancel_click(self, e) -> None:
         """Maneja el click del botón cancelar."""
-        if self._current_dialog and self._current_dialog in self.page.overlay:
-            self.page.overlay.remove(self._current_dialog)
-        self._current_dialog = None
-        self._modal_open = False
-        self._modal_personal = None
-        self._edit_form_fields = {}
-        self.page.update()
+        self._close_modal()
 
     def _on_save_click(self, e) -> None:
         """Maneja el click del botón guardar."""
-        # Guardar primero
         self._save_personal_sync()
-        
-        # Cerrar diálogo
-        if self._current_dialog and self._current_dialog in self.page.overlay:
-            self.page.overlay.remove(self._current_dialog)
-        self._current_dialog = None
-        self._modal_open = False
-        self._modal_personal = None
-        self._edit_form_fields = {}
-        self.page.update()
+        self._close_modal()
 
     def _close_modal(self, e=None) -> None:
         """Cierra el modal de edición."""
-        if self._current_dialog and self._current_dialog in self.page.overlay:
-            self.page.overlay.remove(self._current_dialog)
+        if self._current_dialog:
+            try:
+                self.page.pop_dialog()
+            except Exception:
+                pass
         self._current_dialog = None
         self._modal_open = False
         self._modal_personal = None
         self._edit_form_fields = {}
-        try:
-            self.page.update()
-        except Exception:
-            pass
 
     def _show_edit_modal(self, personal: PersonalResponseDTO) -> None:
         """Muestra el modal de edición para un personal."""
         try:
-            # Asignar el personal ANTES de crear el modal
             self._modal_personal = personal
             self._modal_open = True
-            
-            # Crear nuevo modal
             self._current_dialog = self._create_edit_modal()
-            self.page.overlay.append(self._current_dialog)
-            self._current_dialog.open = True
-            self.page.update()
-            
+            self.page.show_dialog(self._current_dialog)
         except Exception as err:
             print(f"Error al abrir modal: {err}")
             self._show_snackbar(f"Error al abrir el formulario: {err}", error=True)
