@@ -1,83 +1,131 @@
-from app.controllers.personal_controller import PersonalController
-from app.config.database import test_connection
+import flet as ft
+
+from app.config.theme import configure_page
+from app.components.main_layout import MainLayout
+from app.components.theme_toggle import ThemeToggleButton
+from app.components.side_menu import SideMenu, MenuItem
 
 
-def probar_personal():
-    ok, message = test_connection()
-    print("CONEXIÓN:", ok, message)
+def main(page: ft.Page):
+    configure_page(page)
 
-    if not ok:
-        return
+    # --- Contenido central dinámico ---
+    content_area = ft.Column(
+        expand=True,
+        controls=[ft.Text("Contenido principal", size=16)],
+    )
 
-    controller = PersonalController()
-
-    data_create = {
-        "num_empleado": "TAU0001",
-        "id_puesto": 1,
-        "id_area": 1,
-        "apellido_paterno": "Pérez",
-        "apellido_materno": "López",
-        "nombres": "Juan Carlos",
-        "id_area_res": 1,
-        "tc": 3,
-        "mail": "juanperez@taurus.com.mx",
-        "id_departamento": 1,
-        "id_area_res2": 1,
-        "perm_fsm": 0,
-        "tipo_puesto": 1,
-        "activo": True,
-        "id_area_res3": None,
+    # Títulos por cada sección
+    sections = {
+        "dashboard": {
+            "title": "Dashboard",
+            "subtitle": "Resumen general del sistema",
+            "body": ft.Text("Bienvenido al panel principal.", size=16),
+        },
+        "personal": {
+            "title": "Personal",
+            "subtitle": "Gestión del personal de la organización",
+            "body": ft.Text("Listado de personal (próximamente).", size=16),
+        },
     }
 
-    # print("\n--- CREAR ---")
-    # ok, message, data = controller.crear_personal(data_create)
-    # print(ok, message)
-    # print(data)
+    # --- Historial de navegación ---
+    # Guardamos las claves de las secciones visitadas (la actual NO se guarda aquí).
+    history: list[str] = []
+    current_key: dict[str, str | None] = {"value": None}
 
-    # print("\n--- LISTAR ---")
-    # ok, message, data = controller.listar_personal()
-    # print(ok, message)
-    # print(data)
+    # Layout (se crea primero para poder actualizar título/subtítulo desde callbacks)
+    layout = MainLayout(
+        title=sections["dashboard"]["title"],
+        subtitle=sections["dashboard"]["subtitle"],
+        content=content_area,
+        actions=[ThemeToggleButton(page)],
+    )
 
-    print("\n--- OBTENER ---")
-    ok, message, data = controller.obtener_personal("TAU0001")
-    print(ok, message)
-    print(data)
+    def _render_section(key: str) -> None:
+        """Pinta la sección en el layout sin tocar el historial."""
+        section = sections.get(key)
+        if not section:
+            return
+        current_key["value"] = key
+        layout.title = section["title"]
+        layout.subtitle = section["subtitle"]
+        content_area.controls = [section["body"]]
+        layout.can_go_back = len(history) > 0
+        layout.content = layout._build()
+        page.update()
 
-    data_update = {
-        "num_empleado": "TAU0001",
-        "id_puesto": 2,
-        "id_area": 1,
-        "apellido_paterno": "Pérez",
-        "apellido_materno": "García",
-        "nombres": "Juan Carlos",
-        "id_area_res": 1,
-        "tc": 3,
-        "mail": "juan.perez@empresa.com",
-        "id_departamento": 1,
-        "id_area_res2": 1,
-        "perm_fsm": 1,
-        "tipo_puesto": 2,
-        "activo": True,
-        "id_area_res3": None,
-    }
+    def show_section(key: str) -> None:
+        """Navegación hacia adelante: apila la sección actual en el historial."""
+        if key == current_key["value"]:
+            return
+        if current_key["value"] is not None:
+            history.append(current_key["value"])
+        _render_section(key)
 
-    print("\n--- ACTUALIZAR ---")
-    ok, message, data = controller.actualizar_personal("TAU0001", data_update)
-    print(ok, message)
-    print(data)
+    def go_back() -> None:
+        """Vuelve a la última sección visitada."""
+        if not history:
+            return
+        previous_key = history.pop()
+        _render_section(previous_key)
+        # Sincroniza la selección del menú lateral
+        side_menu.select(previous_key)
 
-    print("\n--- OBTENER ---")
-    ok, message, data = controller.obtener_personal("TAU0001")
-    print(ok, message)
-    print(data)
+    def on_profile() -> None:
+        page.open(
+            ft.SnackBar(ft.Text("Abrir perfil del usuario"), open=True)
+        )
+
+    def on_logout() -> None:
+        def confirm(_: ft.ControlEvent) -> None:
+            page.close(dlg)
+            page.open(ft.SnackBar(ft.Text("Sesión cerrada"), open=True))
+            # Aquí iría la lógica real de logout (limpiar sesión, navegar al login, etc.)
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Cerrar sesión"),
+            content=ft.Text("¿Seguro que deseas cerrar sesión?"),
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda _: page.close(dlg)),
+                ft.FilledButton("Cerrar sesión", on_click=confirm),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        page.open(dlg)
+
+    # --- Menú lateral ---
+    side_menu = SideMenu(
+        items=[
+            MenuItem(
+                key="dashboard",
+                label="Dashboard",
+                icon=ft.Icons.SPACE_DASHBOARD_OUTLINED,
+                selected_icon=ft.Icons.SPACE_DASHBOARD,
+            ),
+            MenuItem(
+                key="personal",
+                label="Personal",
+                icon=ft.Icons.PEOPLE_OUTLINE,
+                selected_icon=ft.Icons.PEOPLE,
+            ),
+        ],
+        selected_key="dashboard",
+        on_select=show_section,
+        on_profile=on_profile,
+        on_logout=on_logout,
+        user_name="Jorge Tenorio",
+        user_role="Administrador",
+    )
+
+    # Conectamos el botón de "atrás" del header con la lógica del historial
+    layout.on_back = go_back
+    layout.navigation = side_menu
+    layout.content = layout._build()  # reconstruir con el sidebar ya asignado
+
+    page.add(layout)
+    show_section("dashboard")
 
 
-    print("\n--- ELIMINAR ---")
-    ok, message, data = controller.eliminar_personal("TAU0001")
-    print(ok, message)
-    print(data)
-
-
-if __name__ == "__main__":
-    probar_personal()
+ft.app(target=main)
