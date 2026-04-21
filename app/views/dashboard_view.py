@@ -5,10 +5,10 @@ import flet as ft
 from app.views.base import View
 
 
-class PersonalView(View):
-    key = "personal"
-    title = "Personal"
-    subtitle = "Gestión del personal de la organización"
+class DashboardView(View):
+    key = "dashboard"
+    title = "Dashboard"
+    subtitle = "Resumen general del sistema"
 
     def build(self) -> ft.Control:
         return ft.Column(
@@ -16,13 +16,13 @@ class PersonalView(View):
             spacing=16,
             controls=[
                 ft.Text(
-                    "Listado de personal (próximamente).",
+                    "Bienvenido al panel principal.",
                     size=20,
                     weight=ft.FontWeight.W_600,
                     color=ft.Colors.ON_SURFACE,
                 ),
                 ft.Text(
-                    "Aquí irá la tabla con los colaboradores, filtros y acciones.",
+                    "Aquí verás métricas e indicadores clave del sistema.",
                     size=14,
                     color=ft.Colors.ON_SURFACE_VARIANT,
                 ),

@@ -4,128 +4,110 @@ from app.config.theme import configure_page
 from app.components.main_layout import MainLayout
 from app.components.theme_toggle import ThemeToggleButton
 from app.components.side_menu import SideMenu, MenuItem
+from app.navigation import AppRouter, SectionRegistry
+from app.navigation.registry import SectionEntry
+from app.views.dashboard_view import DashboardView
+from app.views.personal_view import PersonalView
 
 
 def main(page: ft.Page):
     configure_page(page)
 
-    # --- Contenido central dinámico ---
-    content_area = ft.Column(
-        expand=True,
-        controls=[ft.Text("Contenido principal", size=16)],
+    # --- Registro de secciones (carga perezosa) ---
+    registry = SectionRegistry()
+    registry.register(
+        DashboardView,
+        icon=ft.Icons.SPACE_DASHBOARD_OUTLINED,
+        selected_icon=ft.Icons.SPACE_DASHBOARD,
+    )
+    registry.register(
+        PersonalView,
+        icon=ft.Icons.PEOPLE_OUTLINE,
+        selected_icon=ft.Icons.PEOPLE,
     )
 
-    # Títulos por cada sección
-    sections = {
-        "dashboard": {
-            "title": "Dashboard",
-            "subtitle": "Resumen general del sistema",
-            "body": ft.Text("Bienvenido al panel principal.", size=16),
-        },
-        "personal": {
-            "title": "Personal",
-            "subtitle": "Gestión del personal de la organización",
-            "body": ft.Text("Listado de personal (próximamente).", size=16),
-        },
-    }
-
-    # --- Historial de navegación ---
-    # Guardamos las claves de las secciones visitadas (la actual NO se guarda aquí).
-    history: list[str] = []
-    current_key: dict[str, str | None] = {"value": None}
-
-    # Layout (se crea primero para poder actualizar título/subtítulo desde callbacks)
+    # --- Layout principal (placeholder hasta que el router cargue la primera sección) ---
+    placeholder = ft.Container(expand=True)
     layout = MainLayout(
-        title=sections["dashboard"]["title"],
-        subtitle=sections["dashboard"]["subtitle"],
-        content=content_area,
+        title="",
+        subtitle="",
+        content=placeholder,
         actions=[ThemeToggleButton(page)],
+        fill_viewport=False,
     )
 
-    def _render_section(key: str) -> None:
-        """Pinta la sección en el layout sin tocar el historial."""
-        section = sections.get(key)
-        if not section:
-            return
-        current_key["value"] = key
-        layout.title = section["title"]
-        layout.subtitle = section["subtitle"]
-        content_area.controls = [section["body"]]
-        layout.can_go_back = len(history) > 0
-        layout.content = layout._build()
-        page.update()
-
-    def show_section(key: str) -> None:
-        """Navegación hacia adelante: apila la sección actual en el historial."""
-        if key == current_key["value"]:
-            return
-        if current_key["value"] is not None:
-            history.append(current_key["value"])
-        _render_section(key)
-
-    def go_back() -> None:
-        """Vuelve a la última sección visitada."""
-        if not history:
-            return
-        previous_key = history.pop()
-        _render_section(previous_key)
-        # Sincroniza la selección del menú lateral
-        side_menu.select(previous_key)
-
+    # --- Acciones de usuario (perfil / logout) ---
     def on_profile() -> None:
-        page.open(
-            ft.SnackBar(ft.Text("Abrir perfil del usuario"), open=True)
-        )
+        sb = ft.SnackBar(ft.Text("Abrir perfil del usuario"))
+        page.snack_bar = sb
+        sb.open = True
+        page.update()
 
     def on_logout() -> None:
         def confirm(_: ft.ControlEvent) -> None:
-            page.close(dlg)
-            page.open(ft.SnackBar(ft.Text("Sesión cerrada"), open=True))
-            # Aquí iría la lógica real de logout (limpiar sesión, navegar al login, etc.)
+            dlg.open = False
+            page.update()
+            sb = ft.SnackBar(ft.Text("Sesión cerrada"))
+            page.snack_bar = sb
+            sb.open = True
+            page.update()
+
+        def cancel(_: ft.ControlEvent) -> None:
+            dlg.open = False
+            page.update()
 
         dlg = ft.AlertDialog(
             modal=True,
             title=ft.Text("Cerrar sesión"),
             content=ft.Text("¿Seguro que deseas cerrar sesión?"),
             actions=[
-                ft.TextButton("Cancelar", on_click=lambda _: page.close(dlg)),
+                ft.TextButton("Cancelar", on_click=cancel),
                 ft.FilledButton("Cerrar sesión", on_click=confirm),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
         )
-        page.open(dlg)
+        page.dialog = dlg
+        dlg.open = True
+        page.update()
 
-    # --- Menú lateral ---
+    # --- Menú lateral construido dinámicamente desde el registro ---
     side_menu = SideMenu(
         items=[
             MenuItem(
-                key="dashboard",
-                label="Dashboard",
-                icon=ft.Icons.SPACE_DASHBOARD_OUTLINED,
-                selected_icon=ft.Icons.SPACE_DASHBOARD,
-            ),
-            MenuItem(
-                key="personal",
-                label="Personal",
-                icon=ft.Icons.PEOPLE_OUTLINE,
-                selected_icon=ft.Icons.PEOPLE,
-            ),
+                key=entry.key,
+                label=entry.title,
+                icon=entry.icon,
+                selected_icon=entry.selected_icon,
+            )
+            for entry in registry.all()
         ],
-        selected_key="dashboard",
-        on_select=show_section,
+        selected_key=registry.default_key,
+        on_select=lambda key: router.go(key),
         on_profile=on_profile,
         on_logout=on_logout,
         user_name="Jorge Tenorio",
         user_role="Administrador",
     )
 
-    # Conectamos el botón de "atrás" del header con la lógica del historial
-    layout.on_back = go_back
     layout.navigation = side_menu
-    layout.content = layout._build()  # reconstruir con el sidebar ya asignado
+    layout.content = layout._build()
+
+    # --- Callback del router: actualiza UI al cambiar de sección ---
+    def on_section_change(entry: SectionEntry) -> None:
+        view = entry.get_view(page)
+        view.on_enter()
+        layout.set_section(entry.title, entry.subtitle, view.get_content())
+        layout.set_can_go_back(router.can_go_back)
+        side_menu.select(entry.key)
+
+    # --- Router ---
+    router = AppRouter(page, registry, on_change=on_section_change)
+    layout.on_back = router.go_back
 
     page.add(layout)
-    show_section("dashboard")
+
+    # Arranca respetando la URL actual (o la sección por defecto)
+    router.start(default_key=registry.default_key)
 
 
 ft.app(target=main)

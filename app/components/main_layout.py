@@ -16,36 +16,84 @@ class MainLayout(ft.Container):
         content_padding: int = 24,
     ):
         super().__init__()
-        self.title = title
-        self.subtitle = subtitle
+        # Canonical state (private) — must be assigned BEFORE being read below.
+        self._title = title
+        self._subtitle = subtitle
+        self._can_go_back = can_go_back
+
         self.actions = actions or []
         self.navigation = navigation
         self.on_back = on_back
-        self.can_go_back = can_go_back
         self.fill_viewport = fill_viewport
         self.content_padding = content_padding
 
         self.expand = True
         self.bgcolor = ft.Colors.SURFACE
         self.padding = 0
-        self._user_content = content
+
+        # Controles "vivos" que mutamos en vez de reconstruir todo el árbol.
+        self._title_text = ft.Text(
+            self._title,
+            size=24,
+            weight=ft.FontWeight.W_700,
+            color=ft.Colors.ON_SURFACE,
+        )
+        self._subtitle_text = ft.Text(
+            self._subtitle,
+            size=13,
+            color=ft.Colors.ON_SURFACE_VARIANT,
+        )
+        self._back_button = ft.IconButton(
+            icon=ft.Icons.ARROW_BACK,
+            tooltip="Volver a la página anterior",
+            visible=self._can_go_back,
+            on_click=lambda _: self.on_back() if self.on_back else None,
+        )
+
+        # AnimatedSwitcher contiene el contenido dinámico con animación entre vistas.
+        self._switcher = ft.AnimatedSwitcher(
+            content=self._wrap_content(content),
+            duration=220,
+            reverse_duration=160,
+            switch_in_curve=ft.AnimationCurve.EASE_OUT,
+            switch_out_curve=ft.AnimationCurve.EASE_IN,
+            transition=ft.AnimatedSwitcherTransition.FADE,
+        )
+
         self.content = self._build()
 
+    # ---------- API pública ----------
+    def set_section(self, title: str, subtitle: str, content: ft.Control) -> None:
+        """Actualiza header + contenido animando la transición."""
+        self._title = title
+        self._subtitle = subtitle
+        self._title_text.value = title
+        self._subtitle_text.value = subtitle
+        self._switcher.content = self._wrap_content(content)
+        if self.page:
+            self.update()
+
+    def set_can_go_back(self, value: bool) -> None:
+        self._can_go_back = value
+        self._back_button.visible = value
+        if self.page:
+            self._back_button.update()
+
+    # ---------- Construcción ----------
     def _build(self) -> ft.Control:
+        """Arma el layout raíz: menú lateral + área principal."""
+        children: list[ft.Control] = []
+        if self.navigation is not None:
+            children.append(self._build_side_menu())
+        children.append(self._build_main_area())
+
         return ft.Row(
             expand=True,
             spacing=0,
-            vertical_alignment=ft.CrossAxisAlignment.STRETCH,
-            controls=[
-                self._build_sidebar(),
-                self._build_main_area(),
-            ],
+            controls=children,
         )
 
-    def _build_sidebar(self) -> ft.Control:
-        if self.navigation is None:
-            return ft.Container(width=0, visible=False)
-
+    def _build_side_menu(self) -> ft.Control:
         return ft.Container(
             width=280,
             bgcolor=ft.Colors.SURFACE_CONTAINER,
@@ -54,36 +102,34 @@ class MainLayout(ft.Container):
             content=self.navigation,
         )
 
-    def _build_main_area(self) -> ft.Control:
-        # Aseguramos que el contenido del usuario se expanda para llenar
-        # todo el espacio disponible (ancho y alto).
+    def _wrap_content(self, content: ft.Control) -> ft.Control:
+        """Envuelve el contenido de usuario en el 'card' o 'fill viewport'."""
         try:
-            self._user_content.expand = True
+            content.expand = True
         except AttributeError:
-            # Por si acaso se pasa un control que no soporte 'expand'
             pass
 
-        # Contenedor "tarjeta" que envuelve el contenido del usuario
         if self.fill_viewport:
-            content_card = ft.Container(
+            return ft.Container(
+                key=str(id(content)),  # fuerza al switcher a detectar el cambio
                 expand=True,
                 bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
                 padding=0,
-                content=self._user_content,
+                content=content,
             )
-            outer_padding = 0
-            column_spacing = 0
-        else:
-            content_card = ft.Container(
-                expand=True,
-                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
-                border_radius=20,
-                border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
-                padding=self.content_padding,
-                content=self._user_content,
-            )
-            outer_padding = 24
-            column_spacing = 20
+
+        return ft.Container(
+            key=str(id(content)),
+            expand=True,
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            padding=self.content_padding,
+            border_radius=12,
+            content=content,
+        )
+
+    def _build_main_area(self) -> ft.Control:
+        outer_padding = 0 if self.fill_viewport else 24
+        column_spacing = 0 if self.fill_viewport else 20
 
         return ft.Container(
             expand=True,
@@ -95,22 +141,12 @@ class MainLayout(ft.Container):
                 horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
                 controls=[
                     self._build_header(),
-                    content_card,
+                    self._switcher,
                 ],
             ),
         )
 
     def _build_header(self) -> ft.Control:
-        # Botón de "atrás" (solo visible si hay historial)
-        back_button = ft.IconButton(
-            icon=ft.Icons.ARROW_BACK,
-            tooltip="Volver a la página anterior",
-            visible=self.can_go_back,
-            on_click=lambda _: self.on_back() if self.on_back else None,
-        )
-
-        # Si fill_viewport=True, damos un poco de padding interno al header
-        # porque el contenedor externo ya no tiene padding.
         header_padding = (
             ft.padding.symmetric(horizontal=16, vertical=12)
             if self.fill_viewport
@@ -127,21 +163,12 @@ class MainLayout(ft.Container):
                         spacing=8,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         controls=[
-                            back_button,
+                            self._back_button,
                             ft.Column(
                                 spacing=2,
                                 controls=[
-                                    ft.Text(
-                                        self.title,
-                                        size=24,
-                                        weight=ft.FontWeight.W_700,
-                                        color=ft.Colors.ON_SURFACE,
-                                    ),
-                                    ft.Text(
-                                        self.subtitle,
-                                        size=13,
-                                        color=ft.Colors.ON_SURFACE_VARIANT,
-                                    ),
+                                    self._title_text,
+                                    self._subtitle_text,
                                 ],
                             ),
                         ],

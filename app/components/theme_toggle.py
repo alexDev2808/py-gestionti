@@ -1,5 +1,7 @@
 import flet as ft
 
+from app.config.theme_store import save_theme_mode
+
 
 class ThemeToggleButton(ft.IconButton):
     """Botón que alterna entre modo claro y oscuro de la página."""
@@ -25,5 +27,6 @@ class ThemeToggleButton(ft.IconButton):
             if self.page_ref.theme_mode == ft.ThemeMode.LIGHT
             else ft.ThemeMode.LIGHT
         )
+        save_theme_mode(self.page_ref, self.page_ref.theme_mode)
         self._sync_icon()
         self.page_ref.update()

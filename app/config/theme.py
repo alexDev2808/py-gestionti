@@ -1,5 +1,7 @@
 import flet as ft
 
+from app.config.theme_store import load_theme_mode
+
 
 class AppTheme:
     # Paleta principal
@@ -55,7 +57,7 @@ class AppTheme:
 def configure_page(page: ft.Page) -> None:
     page.theme = AppTheme.create_theme()
     page.dark_theme = AppTheme.create_dark_theme()
-    page.theme_mode = ft.ThemeMode.LIGHT
+    page.theme_mode = load_theme_mode(page, default=ft.ThemeMode.LIGHT)
     page.bgcolor = ft.Colors.SURFACE
     page.padding = 0
     page.spacing = 0
