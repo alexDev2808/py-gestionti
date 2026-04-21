@@ -133,6 +133,44 @@ class PersonalRepository:
 
         return self._row_to_personal(row)
 
+    def get_credentials(self, num_empleado: str) -> Optional[tuple[Personal, str]]:
+        """
+        Obtiene los datos del empleado junto con el hash/contraseña almacenada
+        en la columna [pass]. Devuelve None si no existe o está inactivo.
+        """
+        query = """
+            SELECT
+                id_empleado AS num_empleado,
+                id_funcion AS id_puesto,
+                id_area,
+                app AS apellido_paterno,
+                apm AS apellido_materno,
+                nombre AS nombres,
+                id_area_res,
+                tc,
+                mail,
+                id_areat AS id_departamento,
+                id_area_res2,
+                perm_fsm,
+                tipoPuesto AS tipo_puesto,
+                activo,
+                id_area_res3,
+                [pass] AS password_hash
+            FROM Personal
+            WHERE id_empleado = ? AND activo = 1
+        """
+
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            row = cursor.execute(query, (num_empleado,)).fetchone()
+
+        if not row:
+            return None
+
+        personal = self._row_to_personal(row)
+        password_hash = row.password_hash or ""
+        return personal, password_hash
+
     def update(self, personal: Personal, password_hash: str) -> Optional[Personal]:
         query = """
             UPDATE Personal

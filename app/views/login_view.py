@@ -29,8 +29,8 @@ class LoginView(ft.Container):
 
         # --- Controles del formulario ---
         self._username = ft.TextField(
-            label="Usuario",
-            prefix_icon=ft.Icons.PERSON_OUTLINE,
+            label="Número de empleado",
+            prefix_icon=ft.Icons.BADGE_OUTLINED,
             autofocus=True,
             on_submit=lambda _: self._submit(),
             border_radius=10,

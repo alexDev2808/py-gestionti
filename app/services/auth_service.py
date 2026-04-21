@@ -6,6 +6,9 @@ from typing import Optional
 
 import flet as ft
 
+from app.repositories.personal_repository import PersonalRepository
+from app.utils.password_hasher import verify_password
+
 
 # Clave usada en client_storage para persistir la sesión.
 _STORAGE_KEY = "auth.user"
@@ -14,9 +17,9 @@ _STORAGE_KEY = "auth.user"
 @dataclass(frozen=True)
 class AuthUser:
     """Representa al usuario autenticado en la sesión actual."""
-    username: str
-    name: str
-    role: str
+    username: str   # num_empleado
+    name: str       # nombre completo
+    role: str       # texto humano (p.ej. tipo de puesto)
 
     def to_json(self) -> str:
         return json.dumps(asdict(self))
@@ -37,48 +40,59 @@ class AuthError(Exception):
 
 class AuthService:
     """
-    Servicio de autenticación.
+    Servicio de autenticación contra la tabla Personal.
 
-    Responsabilidades:
-      - Validar credenciales (punto único de integración con backend/BD real).
-      - Mantener el usuario actual en memoria.
-      - Persistir la sesión en `page.client_storage` para recordarla entre recargas.
-
-    Para migrar a un backend real, reemplaza el cuerpo de `authenticate()`
-    por una llamada a la API / capa de repositorios; el resto de la app
-    no necesita cambios.
+    Flujo:
+      - Login por número de empleado (id_empleado) + contraseña (columna [pass]).
+      - Verificación con `verify_password` (soporta hash PBKDF2 o texto plano
+        legado mientras se migran los datos).
+      - Persistencia ligera en `page.client_storage` para recordar la sesión.
     """
 
-    # ---- Usuarios demo (REEMPLAZAR por backend real) ----
-    _DEMO_USERS = {
-        "admin": {
-            "password": "admin123",
-            "name": "Jorge Tenorio",
-            "role": "Administrador",
-        },
-    }
-
-    def __init__(self, page: ft.Page) -> None:
+    def __init__(
+        self,
+        page: ft.Page,
+        repository: Optional[PersonalRepository] = None,
+    ) -> None:
         self.page = page
+        self._repository = repository or PersonalRepository()
         self._current: Optional[AuthUser] = None
 
     # ---------- API pública ----------
-    def authenticate(self, username: str, password: str) -> AuthUser:
-        """Valida credenciales. Lanza AuthError si son inválidas."""
-        username = (username or "").strip()
+    def authenticate(self, num_empleado: str, password: str) -> AuthUser:
+        """Valida credenciales contra la BD. Lanza AuthError si son inválidas."""
+        num_empleado = (num_empleado or "").strip()
         password = password or ""
 
-        if not username or not password:
-            raise AuthError("Usuario y contraseña son obligatorios.")
+        if not num_empleado or not password:
+            raise AuthError("Número de empleado y contraseña son obligatorios.")
 
-        record = self._DEMO_USERS.get(username.lower())
-        if record is None or record["password"] != password:
-            raise AuthError("Usuario o contraseña incorrectos.")
+        try:
+            credentials = self._repository.get_credentials(num_empleado)
+        except Exception as exc:
+            raise AuthError(f"No se pudo contactar con la base de datos: {exc}") from exc
+
+        if credentials is None:
+            raise AuthError("Número de empleado o contraseña incorrectos.")
+
+        personal, stored_password = credentials
+
+        if not verify_password(password, stored_password):
+            raise AuthError("Número de empleado o contraseña incorrectos.")
+
+        full_name = " ".join(
+            part for part in (
+                personal.nombres,
+                personal.apellido_paterno,
+                personal.apellido_materno,
+            )
+            if part
+        ).strip() or personal.num_empleado
 
         user = AuthUser(
-            username=username.lower(),
-            name=record["name"],
-            role=record["role"],
+            username=personal.num_empleado,
+            name=full_name,
+            role=self._role_label(personal.tipo_puesto),
         )
         self._set_current(user, persist=True)
         return user
@@ -126,3 +140,15 @@ class AuthService:
                 self.page.client_storage.set(_STORAGE_KEY, user.to_json())
             except Exception:
                 pass
+
+    @staticmethod
+    def _role_label(tipo_puesto: Optional[int]) -> str:
+        """Traduce el tipo de puesto a una etiqueta legible para la UI."""
+        mapping = {
+            1: "Administrador",
+            2: "Responsable",
+            3: "Empleado",
+        }
+        if tipo_puesto is None:
+            return "Usuario"
+        return mapping.get(int(tipo_puesto), "Usuario")

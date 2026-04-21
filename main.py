@@ -63,15 +63,17 @@ def main(page: ft.Page):
             page.update()
 
         def on_logout() -> None:
-            def confirm(_: ft.ControlEvent) -> None:
+            def close_dialog() -> None:
                 dlg.open = False
                 page.update()
+
+            def confirm(_: ft.ControlEvent) -> None:
+                close_dialog()
                 auth.logout()
                 mount_login()
 
             def cancel(_: ft.ControlEvent) -> None:
-                dlg.open = False
-                page.update()
+                close_dialog()
 
             dlg = ft.AlertDialog(
                 modal=True,
@@ -83,7 +85,11 @@ def main(page: ft.Page):
                 ],
                 actions_alignment=ft.MainAxisAlignment.END,
             )
-            page.dialog = dlg
+
+            # Compatibilidad con versiones recientes de Flet: el diálogo
+            # debe estar en el overlay antes de abrirse.
+            if dlg not in page.overlay:
+                page.overlay.append(dlg)
             dlg.open = True
             page.update()
 
