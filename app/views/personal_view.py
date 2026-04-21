@@ -8,6 +8,7 @@ import flet as ft
 
 from app.components.table_toolbar import TableToolbar
 from app.dto.Personal.personal_response_dto import PersonalResponseDTO
+from app.dto.Personal.personal_update_dto import PersonalUpdateDTO
 from app.services.audit_service import AuditService
 from app.services.personal_service import PersonalService
 from app.views.base import View
@@ -25,6 +26,7 @@ class PersonalView(View):
         ("Depto.", "id_departamento"),
         ("Área", "id_area"),
         ("Estado", "_status"),
+        ("Acciones", "_actions"),
     ]
 
     def __init__(self, page: ft.Page, service: Optional[PersonalService] = None,
@@ -47,6 +49,12 @@ class PersonalView(View):
         self._chrome_offset: int = 260
         self._min_table_height: int = 240
         self._prev_on_resized = None
+
+        # Modal de edición
+        self._modal_personal: Optional[PersonalResponseDTO] = None
+        self._modal_open: bool = False
+        self._edit_form_fields: dict = {}
+        self._current_dialog: Optional[ft.AlertDialog] = None
 
         self._status_text = ft.Text("", size=12, color=ft.Colors.ON_SURFACE_VARIANT)
         self._progress = ft.ProgressBar(visible=False, height=4)
@@ -103,6 +111,288 @@ class PersonalView(View):
                 ),
             ],
         )
+
+    # ---------- Modal de edición ----------
+    def _create_edit_modal(self) -> ft.AlertDialog:
+        """Crea el modal para editar un personal."""
+        if not self._modal_personal:
+            return ft.AlertDialog()
+
+        personal = self._modal_personal
+        
+        # Crear campos de edición
+        self._edit_form_fields = {
+            "nombres": ft.TextField(
+                label="Nombres",
+                value=personal.nombres,
+                min_lines=1,
+                width=400,
+            ),
+            "apellido_paterno": ft.TextField(
+                label="Apellido paterno",
+                value=personal.apellido_paterno,
+                min_lines=1,
+                width=400,
+            ),
+            "apellido_materno": ft.TextField(
+                label="Apellido materno",
+                value=personal.apellido_materno,
+                min_lines=1,
+                width=400,
+            ),
+            "mail": ft.TextField(
+                label="Correo",
+                value=personal.mail,
+                min_lines=1,
+                width=400,
+            ),
+            "id_puesto": ft.TextField(
+                label="ID Puesto",
+                value=str(personal.id_puesto),
+                min_lines=1,
+                width=400,
+            ),
+            "id_area": ft.TextField(
+                label="ID Área",
+                value=str(personal.id_area),
+                min_lines=1,
+                width=400,
+            ),
+            "id_departamento": ft.TextField(
+                label="ID Departamento",
+                value=str(personal.id_departamento),
+                min_lines=1,
+                width=400,
+            ),
+            "tc": ft.TextField(
+                label="TC",
+                value=str(personal.tc),
+                min_lines=1,
+                width=400,
+            ),
+            "id_area_res": ft.TextField(
+                label="ID Área Responsable",
+                value=str(personal.id_area_res),
+                min_lines=1,
+                width=400,
+            ),
+            "id_area_res2": ft.TextField(
+                label="ID Área Responsable 2",
+                value=str(personal.id_area_res2),
+                min_lines=1,
+                width=400,
+            ),
+            "id_area_res3": ft.TextField(
+                label="ID Área Responsable 3",
+                value=str(personal.id_area_res3 or ""),
+                min_lines=1,
+                width=400,
+            ),
+            "perm_fsm": ft.TextField(
+                label="Permisos FSM",
+                value=str(personal.perm_fsm),
+                min_lines=1,
+                width=400,
+            ),
+            "tipo_puesto": ft.TextField(
+                label="Tipo de Puesto",
+                value=str(personal.tipo_puesto),
+                min_lines=1,
+                width=400,
+            ),
+        }
+
+        form_content = ft.Column(
+            scroll=ft.ScrollMode.AUTO,
+            spacing=8,
+            controls=list(self._edit_form_fields.values()),
+        )
+
+        dialog = ft.AlertDialog(
+            title=ft.Text(f"Editar Personal: {personal.num_empleado}"),
+            content=ft.Container(
+                width=500,
+                height=600,
+                content=form_content,
+            ),
+            actions=[
+                ft.TextButton("Cancelar", on_click=self._on_cancel_click),
+                ft.TextButton("Guardar", on_click=self._on_save_click),
+            ],
+        )
+        return dialog
+
+    def _on_cancel_click(self, e) -> None:
+        """Maneja el click del botón cancelar."""
+        if self._current_dialog and self._current_dialog in self.page.overlay:
+            self.page.overlay.remove(self._current_dialog)
+        self._current_dialog = None
+        self._modal_open = False
+        self._modal_personal = None
+        self._edit_form_fields = {}
+        self.page.update()
+
+    def _on_save_click(self, e) -> None:
+        """Maneja el click del botón guardar."""
+        # Guardar primero
+        self._save_personal_sync()
+        
+        # Cerrar diálogo
+        if self._current_dialog and self._current_dialog in self.page.overlay:
+            self.page.overlay.remove(self._current_dialog)
+        self._current_dialog = None
+        self._modal_open = False
+        self._modal_personal = None
+        self._edit_form_fields = {}
+        self.page.update()
+
+    def _close_modal(self, e=None) -> None:
+        """Cierra el modal de edición."""
+        if self._current_dialog and self._current_dialog in self.page.overlay:
+            self.page.overlay.remove(self._current_dialog)
+        self._current_dialog = None
+        self._modal_open = False
+        self._modal_personal = None
+        self._edit_form_fields = {}
+        try:
+            self.page.update()
+        except Exception:
+            pass
+
+    def _show_edit_modal(self, personal: PersonalResponseDTO) -> None:
+        """Muestra el modal de edición para un personal."""
+        try:
+            # Asignar el personal ANTES de crear el modal
+            self._modal_personal = personal
+            self._modal_open = True
+            
+            # Crear nuevo modal
+            self._current_dialog = self._create_edit_modal()
+            self.page.overlay.append(self._current_dialog)
+            self._current_dialog.open = True
+            self.page.update()
+            
+        except Exception as err:
+            print(f"Error al abrir modal: {err}")
+            self._show_snackbar(f"Error al abrir el formulario: {err}", error=True)
+
+    def _save_personal_sync(self) -> None:
+        """Guarda los cambios del personal (versión sincrónica)."""
+        if not self._modal_personal or not self._edit_form_fields:
+            self._show_snackbar("Error: No hay datos para guardar", error=True)
+            return
+
+        try:
+            # Obtener valores de los campos ANTES de hacer cualquier otra cosa
+            valores = {}
+            for key, field in self._edit_form_fields.items():
+                try:
+                    if key == "id_area_res3":
+                        valores[key] = int(field.value) if field.value.strip() else None
+                    elif key.startswith("id_") or key in ["tc", "perm_fsm", "tipo_puesto"]:
+                        valores[key] = int(field.value)
+                    else:
+                        valores[key] = field.value.strip()
+                except ValueError as ve:
+                    self._show_snackbar(f"Error en campo {key}: {ve}", error=True)
+                    return
+            
+            # Validar campos obligatorios
+            if not valores.get("nombres", "").strip():
+                self._show_snackbar("El nombre es obligatorio", error=True)
+                return
+
+            # Crear DTO de actualización
+            update_dto = PersonalUpdateDTO(
+                num_empleado=self._modal_personal.num_empleado,
+                nombres=valores["nombres"],
+                apellido_paterno=valores["apellido_paterno"],
+                apellido_materno=valores["apellido_materno"],
+                mail=valores["mail"],
+                id_puesto=valores["id_puesto"],
+                id_area=valores["id_area"],
+                id_departamento=valores["id_departamento"],
+                tc=valores["tc"],
+                id_area_res=valores["id_area_res"],
+                id_area_res2=valores["id_area_res2"],
+                perm_fsm=valores["perm_fsm"],
+                tipo_puesto=valores["tipo_puesto"],
+                id_area_res3=valores["id_area_res3"],
+                activo=self._modal_personal.activo,
+            )
+
+            # Llamar al servicio
+            ok, message, updated = self._service.actualizar_personal(self._modal_personal.num_empleado, update_dto)
+            
+            if ok:
+                self._show_snackbar(f"✓ {message}")
+                # Recargar datos en background
+                self._load_data()
+            else:
+                self._show_snackbar(f"✗ {message}", error=True)
+                
+        except ValueError as err:
+            self._show_snackbar(f"✗ Error en los datos: {err}", error=True)
+        except Exception as err:
+            print(f"Error al guardar personal: {err}")
+            import traceback
+            traceback.print_exc()
+            self._show_snackbar(f"✗ Error inesperado: {err}", error=True)
+
+    def _save_personal(self, e=None) -> None:
+        """Guarda los cambios del personal (para uso asincrónico)."""
+        self._save_personal_sync()
+
+    async def _finish_save(self, ok: bool, message: str) -> None:
+        """Finaliza el guardado: cierra modal y recarga datos."""
+        # Cerrar el modal
+        self._close_modal()
+        
+        # Mostrar mensaje
+        if ok:
+            self._show_snackbar(f"✓ {message}")
+            self._load_data()
+        else:
+            self._show_snackbar(f"✗ {message}", error=True)
+
+    def _toggle_personal_status(self, personal: PersonalResponseDTO) -> None:
+        """Activa o desactiva un personal."""
+        async def toggle_async() -> None:
+            try:
+                if personal.activo:
+                    ok, message, _ = await asyncio.to_thread(
+                        self._service.eliminar_personal, personal.num_empleado
+                    )
+                else:
+                    ok, message, _ = await asyncio.to_thread(
+                        self._service.reactivar_personal, personal.num_empleado
+                    )
+                
+                if ok:
+                    self._show_snackbar(f"✓ {message}")
+                    self._load_data()
+                else:
+                    self._show_snackbar(f"✗ {message}", error=True)
+                    
+            except Exception as err:
+                self._show_snackbar(f"✗ Error: {err}", error=True)
+
+        try:
+            asyncio.run_coroutine_threadsafe(
+                toggle_async(), asyncio.get_event_loop()
+            )
+        except RuntimeError:
+            self.page.run_task(toggle_async)
+
+    def _show_snackbar(self, message: str, error: bool = False) -> None:
+        """Muestra un snackbar con el mensaje."""
+        snackbar = ft.SnackBar(
+            ft.Text(message),
+            bgcolor="#F44336" if error else "#4CAF50",  # Rojo para error, Verde para éxito
+        )
+        self.page.overlay.append(snackbar)
+        snackbar.open = True
+        self._safe_update()
 
     # ---------- Handlers de la toolbar ----------
     def _on_search(self, query: str) -> None:
@@ -280,8 +570,43 @@ class PersonalView(View):
                 padding=ft.padding.symmetric(horizontal=12, vertical=8),
                 content=ft.Text(str(v), size=12, no_wrap=False),
             )
-            for v in values
+            for v in values[:-1]  # Todas excepto la última (acciones)
         ]
+        
+        # Crear métodos closure para capturar el item correctamente
+        def on_edit_click(e):
+            self._show_edit_modal(item)
+        
+        def on_toggle_click(e):
+            self._toggle_personal_status(item)
+        
+        # Agregar celda de acciones con botones
+        action_buttons = ft.Row(
+            spacing=4,
+            controls=[
+                ft.IconButton(
+                    icon=ft.Icons.EDIT,
+                    tooltip="Editar",
+                    icon_size=18,
+                    on_click=on_edit_click,
+                ),
+                ft.IconButton(
+                    icon=ft.Icons.POWER_SETTINGS_NEW if item.activo else ft.Icons.CHECK_CIRCLE,
+                    tooltip="Desactivar" if item.activo else "Activar",
+                    icon_size=18,
+                    on_click=on_toggle_click,
+                ),
+            ],
+        )
+        
+        cells.append(
+            ft.Container(
+                expand=True,
+                padding=ft.padding.symmetric(horizontal=12, vertical=8),
+                content=action_buttons,
+            )
+        )
+        
         return ft.Container(
             content=ft.Row(spacing=0, controls=cells),
             border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
@@ -290,7 +615,9 @@ class PersonalView(View):
     def _row_values(self, item: PersonalResponseDTO) -> list[str]:
         out: list[str] = []
         for _, field in self._COLUMNS:
-            if field == "_full_name":
+            if field == "_actions":
+                out.append("")  # Placeholder para acciones
+            elif field == "_full_name":
                 nombres = getattr(item, "nombres", "") or ""
                 ap = getattr(item, "apellido_paterno", "") or ""
                 am = getattr(item, "apellido_materno", "") or ""
