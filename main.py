@@ -131,10 +131,14 @@ def main(page: ft.Page):
         # --- Callback del router: actualiza UI al cambiar de sección ---
         def on_section_change(entry: SectionEntry) -> None:
             view = entry.get_view(page)
-            view.on_enter()
+            # Primero montamos el contenido de la vista en el layout para
+            # que todos sus controles queden adjuntos a la página; sólo
+            # entonces llamamos a on_enter(), que puede intentar actualizar
+            # controles (p. ej. mostrar un ProgressBar).
             layout.set_section(entry.title, entry.subtitle, view.get_content())
             layout.set_can_go_back(router.can_go_back)
             side_menu.select(entry.key)
+            view.on_enter()
 
         # --- Router ---
         router = AppRouter(

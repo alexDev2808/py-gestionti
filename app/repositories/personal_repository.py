@@ -74,7 +74,7 @@ class PersonalRepository:
             id_area_res3=row.id_area_res3,
         )
 
-    def get_all(self) -> List[Personal]:
+    def get_all(self, include_inactive: bool = False) -> List[Personal]:
         query = """
             SELECT
                 id_empleado AS num_empleado,
@@ -93,8 +93,10 @@ class PersonalRepository:
                 activo,
                 id_area_res3
             FROM Personal
-            WHERE activo = 1
         """
+        if not include_inactive:
+            query += " WHERE activo = 1"
+        query += " ORDER BY app, apm, nombre"
 
         with get_connection() as conn:
             cursor = conn.cursor()
@@ -234,6 +236,56 @@ class PersonalRepository:
 
         return personal
 
+    def update_without_password(self, personal: Personal) -> Optional[Personal]:
+        """Actualiza los datos del empleado SIN tocar la columna [pass]."""
+        query = """
+            UPDATE Personal
+            SET
+                id_funcion = ?,
+                id_area = ?,
+                app = ?,
+                apm = ?,
+                nombre = ?,
+                id_area_res = ?,
+                tc = ?,
+                mail = ?,
+                id_areat = ?,
+                id_area_res2 = ?,
+                perm_fsm = ?,
+                tipoPuesto = ?,
+                activo = ?,
+                id_area_res3 = ?
+            WHERE id_empleado = ?
+        """
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                query,
+                (
+                    personal.id_puesto,
+                    personal.id_area,
+                    personal.apellido_paterno,
+                    personal.apellido_materno,
+                    personal.nombres,
+                    personal.id_area_res,
+                    personal.tc,
+                    personal.mail,
+                    personal.id_departamento,
+                    personal.id_area_res2,
+                    personal.perm_fsm,
+                    personal.tipo_puesto,
+                    int(personal.activo),
+                    personal.id_area_res3,
+                    personal.num_empleado,
+                ),
+            )
+            affected = cursor.rowcount
+            conn.commit()
+
+        if affected <= 0:
+            return None
+        return personal
+
     def delete(self, num_empleado: str) -> bool:
         query = """
             UPDATE Personal
@@ -247,4 +299,18 @@ class PersonalRepository:
             affected = cursor.rowcount
             conn.commit()
 
+        return affected > 0
+
+    def restore(self, num_empleado: str) -> bool:
+        """Reactiva un empleado marcado como inactivo."""
+        query = """
+            UPDATE Personal
+            SET activo = 1
+            WHERE id_empleado = ? AND activo = 0
+        """
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, (num_empleado,))
+            affected = cursor.rowcount
+            conn.commit()
         return affected > 0

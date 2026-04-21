@@ -79,8 +79,8 @@ class PersonalService:
         saved = self.repository.create(personal, password_hash)
         return True, "Personal creado correctamente.", self._to_response_dto(saved)
 
-    def listar_personal(self):
-        items = self.repository.get_all()
+    def listar_personal(self, include_inactive: bool = False):
+        items = self.repository.get_all(include_inactive=include_inactive)
         return True, "Listado obtenido correctamente.", [self._to_response_dto(p) for p in items]
 
     def obtener_personal(self, num_empleado: str):
@@ -94,27 +94,29 @@ class PersonalService:
         if not existente:
             return False, "Personal no encontrado.", None
 
-        password_hash = self._generar_password_inicial(dto.apellido_paterno, dto.num_empleado)
+        self._validar_dto(dto)
 
-        personal = Personal(
-            num_empleado=dto.num_empleado,
-            id_puesto=dto.id_puesto,
-            id_area=dto.id_area,
-            apellido_paterno=dto.apellido_paterno,
-            apellido_materno=dto.apellido_materno,
-            nombres=dto.nombres,
-            id_area_res=dto.id_area_res,
-            tc=dto.tc,
-            mail=dto.mail,
-            id_departamento=dto.id_departamento,
-            id_area_res2=dto.id_area_res2,
-            perm_fsm=dto.perm_fsm,
-            tipo_puesto=dto.tipo_puesto,
-            activo=dto.activo,
-            id_area_res3=dto.id_area_res3,
+        # Importante: no tocamos la contraseña al editar datos personales;
+        # el reseteo de contraseña debe ser una operación explícita.
+        updated = self.repository.update_without_password(
+            Personal(
+                num_empleado=dto.num_empleado,
+                id_puesto=dto.id_puesto,
+                id_area=dto.id_area,
+                apellido_paterno=dto.apellido_paterno,
+                apellido_materno=dto.apellido_materno,
+                nombres=dto.nombres,
+                id_area_res=dto.id_area_res,
+                tc=dto.tc,
+                mail=dto.mail,
+                id_departamento=dto.id_departamento,
+                id_area_res2=dto.id_area_res2,
+                perm_fsm=dto.perm_fsm,
+                tipo_puesto=dto.tipo_puesto,
+                activo=dto.activo,
+                id_area_res3=dto.id_area_res3,
+            )
         )
-
-        updated = self.repository.update(personal, password_hash)
         if not updated:
             return False, "No se pudo actualizar el personal.", None
 
@@ -124,4 +126,10 @@ class PersonalService:
         deleted = self.repository.delete(num_empleado)
         if not deleted:
             return False, "Personal no encontrado o ya estaba inactivo.", None
-        return True, "Personal eliminado correctamente (soft delete).", None
+        return True, "Personal desactivado correctamente.", None
+
+    def reactivar_personal(self, num_empleado: str):
+        restored = self.repository.restore(num_empleado)
+        if not restored:
+            return False, "Personal no encontrado o ya estaba activo.", None
+        return True, "Personal reactivado correctamente.", None
