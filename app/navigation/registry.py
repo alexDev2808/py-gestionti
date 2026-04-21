@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, Iterable, List, Optional
 
 import flet as ft
 
@@ -17,12 +17,19 @@ class SectionEntry:
     icon: str
     selected_icon: Optional[str]
     factory: Callable[[ft.Page], View]
+    required_permission: Optional[str] = None
     _instance: Optional[View] = None
 
     def get_view(self, page: ft.Page) -> View:
         if self._instance is None:
             self._instance = self.factory(page)
         return self._instance
+
+    def is_visible_for(self, permissions: Iterable[str]) -> bool:
+        """True si no requiere permiso o el usuario lo posee."""
+        if self.required_permission is None:
+            return True
+        return self.required_permission in permissions
 
 
 class SectionRegistry:
@@ -37,6 +44,7 @@ class SectionRegistry:
         view_cls: type[View],
         icon: str,
         selected_icon: Optional[str] = None,
+        required_permission: Optional[str] = None,
     ) -> None:
         """Registra una clase de vista (no se instancia todavía)."""
         key = view_cls.key
@@ -52,6 +60,7 @@ class SectionRegistry:
             icon=icon,
             selected_icon=selected_icon,
             factory=lambda page: view_cls(page),
+            required_permission=required_permission,
         )
         self._entries[key] = entry
         self._order.append(key)
@@ -64,6 +73,17 @@ class SectionRegistry:
 
     def all(self) -> List[SectionEntry]:
         return [self._entries[k] for k in self._order]
+
+    def visible_for(self, permissions: Iterable[str]) -> List[SectionEntry]:
+        """Devuelve, respetando el orden de registro, las secciones permitidas."""
+        perms = frozenset(permissions)
+        return [self._entries[k] for k in self._order
+                if self._entries[k].is_visible_for(perms)]
+
+    def default_key_for(self, permissions: Iterable[str]) -> Optional[str]:
+        """Primera sección accesible para el usuario (o None)."""
+        visible = self.visible_for(permissions)
+        return visible[0].key if visible else None
 
     @property
     def default_key(self) -> Optional[str]:

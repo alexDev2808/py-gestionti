@@ -171,6 +171,16 @@ class PersonalRepository:
         password_hash = row.password_hash or ""
         return personal, password_hash
 
+    def update_password(self, num_empleado: str, password_hash: str) -> bool:
+        """Actualiza sólo la contraseña (hash) de un empleado."""
+        query = "UPDATE Personal SET [pass] = ? WHERE id_empleado = ?"
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, (password_hash, num_empleado))
+            affected = cursor.rowcount
+            conn.commit()
+        return affected > 0
+
     def update(self, personal: Personal, password_hash: str) -> Optional[Personal]:
         query = """
             UPDATE Personal

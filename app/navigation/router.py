@@ -5,6 +5,8 @@ from typing import Callable, Optional
 import flet as ft
 
 from app.navigation.registry import SectionRegistry, SectionEntry
+from app.services.audit_service import AuditEvent, AuditService
+from app.services.auth_service import AuthUser
 
 
 class AppRouter:
@@ -14,6 +16,8 @@ class AppRouter:
     - URL "/dashboard" -> sección "dashboard"
     - El botón "Atrás" nativo del navegador se maneja vía `page.on_view_pop`.
     - Al llamar a `go(key)` actualizamos la URL, lo que dispara `on_route_change`.
+    - Si se proporciona `user`, se valida que tenga el permiso requerido para
+      entrar a la sección; en caso contrario se audita y redirige.
     """
 
     def __init__(
@@ -21,10 +25,14 @@ class AppRouter:
         page: ft.Page,
         registry: SectionRegistry,
         on_change: Callable[[SectionEntry], None],
+        user: Optional[AuthUser] = None,
+        audit: Optional[AuditService] = None,
     ) -> None:
         self.page = page
         self.registry = registry
         self._on_change = on_change
+        self._user = user
+        self._audit = audit
         self._history: list[str] = []
         self._current: Optional[str] = None
         self._suppress_history = False
@@ -34,12 +42,13 @@ class AppRouter:
         page.on_view_pop = self._handle_view_pop
 
     # ---------- API pública ----------
-    def start(self, default_key: str) -> None:
-        """Arranca el router respetando la URL actual si es válida."""
+    def start(self, default_key: Optional[str]) -> None:
+        """Arranca el router respetando la URL actual si es válida y permitida."""
         initial_route = (self.page.route or "").strip("/")
-        if initial_route and initial_route in self.registry:
+        entry = self.registry.get(initial_route) if initial_route else None
+        if entry is not None and self._is_allowed(entry):
             self.go(initial_route)
-        else:
+        elif default_key:
             self.go(default_key)
 
     def go(self, key: str) -> None:
@@ -70,11 +79,21 @@ class AppRouter:
         key = (event.route or "").strip("/")
         entry = self.registry.get(key)
 
-        # Ruta inválida: redirigimos a la sección por defecto
+        # Ruta inválida: redirigimos a la sección por defecto permitida
         if entry is None:
-            default_key = self.registry.default_key
-            if default_key:
-                self.page.go(f"/{default_key}")
+            fallback = self._fallback_key()
+            if fallback:
+                self.page.go(f"/{fallback}")
+            return
+
+        # Guardia de permisos
+        if not self._is_allowed(entry):
+            self._audit_denied(key)
+            fallback = self._fallback_key()
+            if fallback and fallback != key:
+                # No preservamos el historial hacia la ruta rechazada.
+                self._suppress_history = True
+                self.page.go(f"/{fallback}")
             return
 
         # Actualización de historial
@@ -89,3 +108,26 @@ class AppRouter:
     def _handle_view_pop(self, _: ft.ViewPopEvent) -> None:
         # Manejo cuando el usuario pulsa el "Atrás" del navegador/SO.
         self.go_back()
+
+    # ---------- Helpers ----------
+    def _is_allowed(self, entry: SectionEntry) -> bool:
+        if entry.required_permission is None:
+            return True
+        if self._user is None:
+            # Sin usuario (p. ej. tests legados), no aplicamos guardia.
+            return True
+        return entry.is_visible_for(self._user.permissions)
+
+    def _fallback_key(self) -> Optional[str]:
+        if self._user is not None:
+            return self.registry.default_key_for(self._user.permissions)
+        return self.registry.default_key
+
+    def _audit_denied(self, attempted_key: str) -> None:
+        if self._audit is None or self._user is None:
+            return
+        self._audit.log(
+            self._user.username,
+            AuditEvent.ACCESS_DENIED,
+            f"intento de acceso a '{attempted_key}'",
+        )

@@ -6,7 +6,9 @@ from app.components.theme_toggle import ThemeToggleButton
 from app.components.side_menu import SideMenu, MenuItem
 from app.navigation import AppRouter, SectionRegistry
 from app.navigation.registry import SectionEntry
+from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService, AuthUser
+from app.services.permissions import PERM_DASHBOARD_VIEW, PERM_PERSONAL_VIEW
 from app.views.dashboard_view import DashboardView
 from app.views.login_view import LoginView
 from app.views.personal_view import PersonalView
@@ -15,7 +17,8 @@ from app.views.personal_view import PersonalView
 def main(page: ft.Page):
     configure_page(page)
 
-    auth = AuthService(page)
+    audit = AuditService()
+    auth = AuthService(page, audit=audit)
 
     # -------------------------------------------------------------
     # Flujo: si hay sesión -> app; si no -> login.
@@ -38,12 +41,22 @@ def main(page: ft.Page):
             DashboardView,
             icon=ft.Icons.SPACE_DASHBOARD_OUTLINED,
             selected_icon=ft.Icons.SPACE_DASHBOARD,
+            required_permission=PERM_DASHBOARD_VIEW,
         )
         registry.register(
             PersonalView,
             icon=ft.Icons.PEOPLE_OUTLINE,
             selected_icon=ft.Icons.PEOPLE,
+            required_permission=PERM_PERSONAL_VIEW,
         )
+
+        visible_entries = registry.visible_for(user.permissions)
+
+        if not visible_entries:
+            # El usuario no tiene acceso a ninguna sección; cerramos sesión.
+            auth.logout()
+            mount_login()
+            return
 
         # --- Layout principal (placeholder hasta que el router cargue la primera sección) ---
         placeholder = ft.Container(expand=True)
@@ -102,14 +115,14 @@ def main(page: ft.Page):
                     icon=entry.icon,
                     selected_icon=entry.selected_icon,
                 )
-                for entry in registry.all()
+                for entry in visible_entries
             ],
-            selected_key=registry.default_key,
+            selected_key=visible_entries[0].key if visible_entries else None,
             on_select=lambda key: router.go(key),
             on_profile=on_profile,
             on_logout=on_logout,
             user_name=user.name,
-            user_role=user.role,
+            user_role=user.role_label,
         )
 
         layout.navigation = side_menu
@@ -124,14 +137,20 @@ def main(page: ft.Page):
             side_menu.select(entry.key)
 
         # --- Router ---
-        router = AppRouter(page, registry, on_change=on_section_change)
+        router = AppRouter(
+            page,
+            registry,
+            on_change=on_section_change,
+            user=user,
+            audit=audit,
+        )
         layout.on_back = router.go_back
 
         page.add(layout)
         page.update()
 
-        # Arranca respetando la URL actual (o la sección por defecto)
-        router.start(default_key=registry.default_key)
+        # Arranca respetando la URL actual (o la sección por defecto permitida)
+        router.start(default_key=registry.default_key_for(user.permissions))
 
     # -------------------------------------------------------------
     # Arranque: intentar restaurar sesión previa.

@@ -20,6 +20,19 @@ _ITERATIONS = 120_000
 _SALT_BYTES = 16
 
 
+def is_hashed(stored: str) -> bool:
+    """Indica si el valor almacenado ya está en formato hash conocido."""
+    if not stored:
+        return False
+    stored = stored.strip()
+    return stored.startswith(f"{_ALGO}$") and stored.count("$") == 2
+
+
+def needs_rehash(stored: str) -> bool:
+    """True si el valor almacenado debe ser re-hasheado (texto plano o vacío)."""
+    return not is_hashed(stored)
+
+
 def hash_password(password: str) -> str:
     """Genera un hash PBKDF2-SHA256 con salt aleatorio."""
     salt = os.urandom(_SALT_BYTES)
