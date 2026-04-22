@@ -58,6 +58,9 @@ class PersonalService:
             tipo_puesto=personal.tipo_puesto,
             activo=personal.activo,
             id_area_res3=personal.id_area_res3,
+            nombre_departamento=personal.nombre_departamento,
+            nombre_area=personal.nombre_area,
+            nombre_jefe=personal.nombre_jefe,
         )
 
     def _validar_dto(self, dto) -> None:
@@ -208,6 +211,24 @@ class PersonalService:
         if not deleted:
             return False, "Personal no encontrado o ya estaba inactivo.", None
         return True, "Personal desactivado correctamente.", None
+
+    def get_opciones_modal(self) -> dict:
+        """
+        Carga los catálogos necesarios para poblar los dropdowns del modal de Personal.
+
+        Retorna:
+            dict con claves: departamentos, areas, puestos, jefes — cada una una lista de (id, nombre).
+        """
+        from app.repositories.areas_repository import AreasRepository
+        from app.repositories.departamentos_repository import DepartamentosRepository
+        from app.repositories.puestos_repository import PuestosRepository
+        from app.repositories.responsable_departamentos_repository import ResponsableDepartamentosRepository
+
+        departamentos = [(d.id_departamento, d.nombre) for d in DepartamentosRepository().get_all()]
+        areas = [(a.id_area, a.nombre) for a in AreasRepository().get_all()]
+        puestos = [(p.id_puesto, p.puesto) for p in PuestosRepository().get_all()]
+        jefes = [(r.id_res_dep, r.nombre_responsable) for r in ResponsableDepartamentosRepository().get_all()]
+        return {"departamentos": departamentos, "areas": areas, "puestos": puestos, "jefes": jefes}
 
     def reactivar_personal(self, num_empleado: str):
         """

@@ -21,3 +21,6 @@ class Personal:
     tipo_puesto: int
     activo: Optional[bool] = True
     id_area_res3: Optional[int] = None
+    nombre_departamento: Optional[str] = None
+    nombre_area: Optional[str] = None
+    nombre_jefe: Optional[str] = None

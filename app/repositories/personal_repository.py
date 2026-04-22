@@ -95,6 +95,9 @@ class PersonalRepository:
             tipo_puesto=row.tipo_puesto,
             activo=bool(row.activo),
             id_area_res3=row.id_area_res3,
+            nombre_departamento=getattr(row, "nombre_departamento", None),
+            nombre_area=getattr(row, "nombre_area", None),
+            nombre_jefe=getattr(row, "nombre_jefe", None),
         )
 
     def get_all(self, include_inactive: bool = False) -> List[Personal]:
@@ -109,30 +112,44 @@ class PersonalRepository:
         """
         query = """
             SELECT
-                id_empleado AS num_empleado,
-                id_funcion AS id_puesto,
-                id_area,
-                app AS apellido_paterno,
-                apm AS apellido_materno,
-                nombre AS nombres,
-                id_area_res,
-                tc,
-                mail,
-                id_areat AS id_departamento,
-                id_area_res2,
-                perm_fsm,
-                tipoPuesto AS tipo_puesto,
-                activo,
-                id_area_res3
-            FROM Personal
+                P.id_empleado AS num_empleado,
+                P.id_funcion AS id_puesto,
+                P.id_area,
+                P.app AS apellido_paterno,
+                P.apm AS apellido_materno,
+                P.nombre AS nombres,
+                P.id_area_res,
+                P.tc,
+                P.mail,
+                P.id_areat AS id_departamento,
+                P.id_area_res2,
+                P.perm_fsm,
+                P.tipoPuesto AS tipo_puesto,
+                P.activo,
+                P.id_area_res3,
+                D.descp AS nombre_departamento,
+                A.nombre AS nombre_area,
+                J.respon AS nombre_jefe
+            FROM Personal P
+            LEFT JOIN dig_areat D ON D.id_areat = P.id_areat
+            LEFT JOIN Areas A ON A.id_area = P.id_area
+            OUTER APPLY (
+                SELECT TOP 1 respon FROM dig_area_auto
+                WHERE id_area_res = P.id_area_res AND activo = 1
+            ) J
         """
         if not include_inactive:
-            query += " WHERE activo = 1"
-        query += " ORDER BY app, apm, nombre"
+            query += " WHERE P.activo = 1"
+        query += " ORDER BY P.app, P.apm, P.nombre"
 
         with get_connection() as conn:
             cursor = conn.cursor()
-            rows = cursor.execute(query).fetchall()
+            try:
+                rows = cursor.execute(query).fetchall()
+            except Exception as e:
+                print(f"[ERROR get_all] {e}")
+                print(f"[QUERY] {query}")
+                raise
 
         return [self._row_to_personal(row) for row in rows]
 
@@ -148,23 +165,32 @@ class PersonalRepository:
         """
         query = """
             SELECT
-                id_empleado AS num_empleado,
-                id_funcion AS id_puesto,
-                id_area,
-                app AS apellido_paterno,
-                apm AS apellido_materno,
-                nombre AS nombres,
-                id_area_res,
-                tc,
-                mail,
-                id_areat AS id_departamento,
-                id_area_res2,
-                perm_fsm,
-                tipoPuesto AS tipo_puesto,
-                activo,
-                id_area_res3
-            FROM Personal
-            WHERE id_empleado = ?
+                P.id_empleado AS num_empleado,
+                P.id_funcion AS id_puesto,
+                P.id_area,
+                P.app AS apellido_paterno,
+                P.apm AS apellido_materno,
+                P.nombre AS nombres,
+                P.id_area_res,
+                P.tc,
+                P.mail,
+                P.id_areat AS id_departamento,
+                P.id_area_res2,
+                P.perm_fsm,
+                P.tipoPuesto AS tipo_puesto,
+                P.activo,
+                P.id_area_res3,
+                D.descp AS nombre_departamento,
+                A.nombre AS nombre_area,
+                J.respon AS nombre_jefe
+            FROM Personal P
+            LEFT JOIN dig_areat D ON D.id_areat = P.id_areat
+            LEFT JOIN Areas A ON A.id_area = P.id_area
+            OUTER APPLY (
+                SELECT TOP 1 respon FROM dig_area_auto
+                WHERE id_area_res = P.id_area_res AND activo = 1
+            ) J
+            WHERE P.id_empleado = ?
         """
 
         with get_connection() as conn:

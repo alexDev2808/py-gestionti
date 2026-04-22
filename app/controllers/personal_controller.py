@@ -258,6 +258,54 @@ class PersonalController:
         )
         return self.service.crear_personal(dto)
 
+    def fetch_opciones_modal(self) -> dict:
+        """
+        Carga los catálogos para los dropdowns del modal. Debe ejecutarse en un thread.
+
+        Retorna:
+            dict con claves: departamentos, areas, puestos, jefes.
+        """
+        return self.service.get_opciones_modal()
+
+    def crear_personal_form(self, form_values: dict[str, str]) -> tuple[bool, str]:
+        """
+        Crea un nuevo empleado a partir de los valores del formulario del modal.
+
+        Argumentos:
+            form_values (dict[str, str]): Valores crudos del formulario de creación.
+
+        Retorna:
+            tuple[bool, str]: (True, mensaje) o (False, error).
+        """
+        try:
+            def to_int(key: str, optional: bool = False):
+                raw = form_values.get(key, "").strip()
+                if not raw:
+                    return None if optional else 0
+                return int(raw)
+
+            dto = PersonalCreateDTO(
+                num_empleado=form_values.get("num_empleado", "").strip(),
+                nombres=form_values.get("nombres", "").strip(),
+                apellido_paterno=form_values.get("apellido_paterno", "").strip(),
+                apellido_materno=form_values.get("apellido_materno", "").strip(),
+                mail=form_values.get("mail", "").strip(),
+                id_puesto=to_int("id_puesto"),
+                id_area=to_int("id_area"),
+                id_departamento=to_int("id_departamento"),
+                tc=to_int("tc"),
+                id_area_res=to_int("id_area_res"),
+                id_area_res2=to_int("id_area_res2"),
+                perm_fsm=to_int("perm_fsm"),
+                tipo_puesto=to_int("tipo_puesto"),
+                activo=True,
+                id_area_res3=to_int("id_area_res3", optional=True),
+            )
+            ok, message, _ = self.service.crear_personal(dto)
+            return ok, message
+        except Exception as err:
+            return False, f"Error inesperado: {err}"
+
     def obtener_personal(self, num_empleado: str):
         """
         Delega al servicio la búsqueda de un empleado por número.

@@ -25,8 +25,9 @@ class PersonalView(View):
         ("# Empleado", "num_empleado"),
         ("Nombre completo", "_full_name"),
         ("Correo", "mail"),
-        ("Depto.", "id_departamento"),
-        ("Área", "id_area"),
+        ("Depto.", "nombre_departamento"),
+        ("Área", "nombre_area"),
+        ("Jefe", "nombre_jefe"),
         ("Estado", "_status"),
         ("Acciones", "_actions"),
     ]
@@ -96,6 +97,11 @@ class PersonalView(View):
             search_placeholder="Buscar por # empleado, nombre o correo…",
             show_inactive_label="Mostrar inactivos",
             actions=[
+                ft.FilledTonalButton(
+                    content="Nuevo empleado",
+                    icon=ft.Icons.PERSON_ADD_OUTLINED,
+                    on_click=lambda _: self._open_modal_async(),
+                ),
                 ft.IconButton(
                     icon=ft.Icons.REFRESH,
                     tooltip="Recargar",
@@ -238,24 +244,50 @@ class PersonalView(View):
         if self._controller.goto_page(index):
             self._render_page()
 
-    # ---------- Modal de edición ----------
+    # ---------- Modal ----------
 
-    def _show_edit_modal(self, personal: PersonalResponseDTO) -> None:
-        """
-        Abre el modal de edición para el empleado indicado.
+    def _open_modal_async(
+        self, personal: Optional[PersonalResponseDTO] = None
+    ) -> None:
+        self._set_progress(True)
 
-        Argumentos:
-            personal (PersonalResponseDTO): Empleado cuyos datos se cargarán en el formulario.
-        """
+        async def load_and_open() -> None:
+            try:
+                opciones = await asyncio.to_thread(self._controller.fetch_opciones_modal)
+                self._set_progress(False)
+                self._show_modal(personal, opciones)
+            except Exception as err:
+                self._set_progress(False)
+                self._show_snackbar(f"Error al cargar opciones: {err}", error=True)
+
         try:
+            asyncio.run_coroutine_threadsafe(load_and_open(), asyncio.get_event_loop())
+        except RuntimeError:
+            self.page.run_task(load_and_open)
+
+    def _show_modal(
+        self,
+        personal: Optional[PersonalResponseDTO],
+        opciones: dict,
+    ) -> None:
+        try:
+            on_save = (
+                (lambda values: self._on_modal_save(personal, values))
+                if personal
+                else self._on_modal_create
+            )
             self._current_modal = PersonalEditModal(
-                personal=personal,
-                on_save=lambda values: self._on_modal_save(personal, values),
+                page=self.page,
+                departamentos=opciones["departamentos"],
+                areas=opciones["areas"],
+                puestos=opciones["puestos"],
+                jefes=opciones["jefes"],
+                on_save=on_save,
                 on_cancel=self._close_modal,
+                personal=personal,
             )
             self.page.show_dialog(self._current_modal.dialog)
         except Exception as err:
-            print(f"Error al abrir modal: {err}")
             self._show_snackbar(f"Error al abrir el formulario: {err}", error=True)
 
     def _close_modal(self) -> None:
@@ -268,6 +300,15 @@ class PersonalView(View):
             except Exception:
                 pass
         self._current_modal = None
+
+    def _on_modal_create(self, form_values: dict[str, str]) -> None:
+        ok, message = self._controller.crear_personal_form(form_values)
+        self._close_modal()
+        if ok:
+            self._show_snackbar(f"✓ {message}")
+            self._load_data()
+        else:
+            self._show_snackbar(f"✗ {message}", error=True)
 
     def _on_modal_save(self, personal: PersonalResponseDTO, form_values: dict[str, str]) -> None:
         """
@@ -397,7 +438,7 @@ class PersonalView(View):
                     icon=ft.Icons.EDIT,
                     tooltip="Editar",
                     icon_size=18,
-                    on_click=lambda _, p=item: self._show_edit_modal(p),
+                    on_click=lambda _, p=item: self._open_modal_async(p),
                 ),
                 ft.IconButton(
                     icon=ft.Icons.POWER_SETTINGS_NEW if item.activo else ft.Icons.CHECK_CIRCLE,
