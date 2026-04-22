@@ -1,3 +1,5 @@
+"""Router basado en rutas de Flet para la navegación entre secciones con control de permisos."""
+
 from __future__ import annotations
 
 from typing import Callable, Optional
@@ -42,8 +44,14 @@ class AppRouter:
         page.on_view_pop = self._handle_view_pop
 
     # ---------- API pública ----------
+
     def start(self, default_key: Optional[str]) -> None:
-        """Arranca el router respetando la URL actual si es válida y permitida."""
+        """
+        Arranca el router respetando la URL actual si es válida y el usuario tiene acceso.
+
+        Argumentos:
+            default_key (Optional[str]): Clave de sección a usar si la URL no es válida.
+        """
         initial_route = (self.page.route or "").strip("/")
         entry = self.registry.get(initial_route) if initial_route else None
         if entry is not None and self._is_allowed(entry):
@@ -52,13 +60,20 @@ class AppRouter:
             self.go(default_key)
 
     def go(self, key: str) -> None:
-        """Navega hacia una nueva sección, apilándola en el historial."""
+        """
+        Navega hacia una nueva sección actualizando la URL de Flet.
+
+        Argumentos:
+            key (str): Clave de la sección destino.
+        """
         if key == self._current:
             return
         self.page.go(f"/{key}")
 
     def go_back(self) -> None:
-        """Vuelve a la sección previa, si existe historial."""
+        """
+        Vuelve a la sección previa si existe historial de navegación.
+        """
         if not self._history:
             return
         previous_key = self._history.pop()
@@ -68,13 +83,16 @@ class AppRouter:
 
     @property
     def can_go_back(self) -> bool:
+        """True si existe al menos una sección anterior en el historial."""
         return len(self._history) > 0
 
     @property
     def current_key(self) -> Optional[str]:
+        """Clave de la sección actualmente activa, o None si no se ha navegado aún."""
         return self._current
 
     # ---------- Handlers ----------
+
     def _handle_route_change(self, event: ft.RouteChangeEvent) -> None:
         key = (event.route or "").strip("/")
         entry = self.registry.get(key)
@@ -110,7 +128,17 @@ class AppRouter:
         self.go_back()
 
     # ---------- Helpers ----------
+
     def _is_allowed(self, entry: SectionEntry) -> bool:
+        """
+        Indica si el usuario actual tiene permiso para acceder a la sección.
+
+        Argumentos:
+            entry (SectionEntry): Sección a verificar.
+
+        Retorna:
+            bool: True si el acceso está permitido.
+        """
         if entry.required_permission is None:
             return True
         if self._user is None:
@@ -119,11 +147,23 @@ class AppRouter:
         return entry.is_visible_for(self._user.permissions)
 
     def _fallback_key(self) -> Optional[str]:
+        """
+        Devuelve la clave de la primera sección accesible para el usuario actual.
+
+        Retorna:
+            Optional[str]: Clave de la sección fallback, o None si no hay ninguna.
+        """
         if self._user is not None:
             return self.registry.default_key_for(self._user.permissions)
         return self.registry.default_key
 
     def _audit_denied(self, attempted_key: str) -> None:
+        """
+        Registra en auditoría un intento de acceso a una sección no permitida.
+
+        Argumentos:
+            attempted_key (str): Clave de la sección a la que se intentó acceder.
+        """
         if self._audit is None or self._user is None:
             return
         self._audit.log(

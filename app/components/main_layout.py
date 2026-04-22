@@ -1,8 +1,11 @@
+"""Layout principal con menú lateral y área de contenido animada."""
+
 import flet as ft
 from typing import Callable, Optional
 
 
 class MainLayout(ft.Container):
+    """Contenedor raíz con header, menú lateral opcional y AnimatedSwitcher para el contenido."""
     def __init__(
         self,
         content: ft.Control,
@@ -15,6 +18,20 @@ class MainLayout(ft.Container):
         fill_viewport: bool = False,
         content_padding: int = 24,
     ):
+        """
+        Inicializa el layout principal con header, menú lateral y área de contenido.
+
+        Argumentos:
+            content (ft.Control): Control inicial a mostrar en el área de contenido.
+            title (str): Título mostrado en el header.
+            subtitle (str): Subtítulo mostrado bajo el título en el header.
+            actions (list[ft.Control] | None): Controles adicionales a mostrar a la derecha del header.
+            navigation (ft.Control | None): Control del menú lateral; si es None no se muestra panel lateral.
+            on_back (Optional[Callable[[], None]]): Callback invocado al pulsar el botón de retroceso.
+            can_go_back (bool): Controla la visibilidad del botón de retroceso.
+            fill_viewport (bool): Si es True, el contenido ocupa toda la pantalla sin padding adicional.
+            content_padding (int): Padding interior del área de contenido cuando fill_viewport es False.
+        """
         super().__init__()
         # Canonical state (private) — must be assigned BEFORE being read below.
         self._title = title
@@ -64,7 +81,14 @@ class MainLayout(ft.Container):
 
     # ---------- API pública ----------
     def set_section(self, title: str, subtitle: str, content: ft.Control) -> None:
-        """Actualiza header + contenido animando la transición."""
+        """
+        Actualiza el header y el contenido principal con animación de transición.
+
+        Argumentos:
+            title (str): Nuevo título a mostrar en el header.
+            subtitle (str): Nuevo subtítulo a mostrar en el header.
+            content (ft.Control): Nuevo control a mostrar en el área de contenido.
+        """
         self._title = title
         self._subtitle = subtitle
         self._title_text.value = title
@@ -74,6 +98,12 @@ class MainLayout(ft.Container):
             self.update()
 
     def set_can_go_back(self, value: bool) -> None:
+        """
+        Muestra u oculta el botón de retroceso en el header.
+
+        Argumentos:
+            value (bool): True para mostrar el botón; False para ocultarlo.
+        """
         self._can_go_back = value
         self._back_button.visible = value
         if self.page:
@@ -81,7 +111,12 @@ class MainLayout(ft.Container):
 
     # ---------- Construcción ----------
     def _build(self) -> ft.Control:
-        """Arma el layout raíz: menú lateral + área principal."""
+        """
+        Arma el layout raíz combinando el menú lateral (si existe) y el área principal.
+
+        Retorna:
+            ft.Control: Fila con el menú lateral y el área de contenido.
+        """
         children: list[ft.Control] = []
         if self.navigation is not None:
             children.append(self._build_side_menu())
@@ -94,6 +129,12 @@ class MainLayout(ft.Container):
         )
 
     def _build_side_menu(self) -> ft.Control:
+        """
+        Construye el panel lateral con el control de navegación.
+
+        Retorna:
+            ft.Control: Contenedor con ancho fijo que aloja el menú lateral.
+        """
         return ft.Container(
             width=280,
             bgcolor=ft.Colors.SURFACE_CONTAINER,
@@ -103,7 +144,15 @@ class MainLayout(ft.Container):
         )
 
     def _wrap_content(self, content: ft.Control) -> ft.Control:
-        """Envuelve el contenido de usuario en el 'card' o 'fill viewport'."""
+        """
+        Envuelve el contenido en un contenedor con clave única para que AnimatedSwitcher detecte cambios.
+
+        Argumentos:
+            content (ft.Control): Control a envolver.
+
+        Retorna:
+            ft.Control: Contenedor listo para ser asignado al AnimatedSwitcher.
+        """
         try:
             content.expand = True
         except AttributeError:
@@ -128,6 +177,12 @@ class MainLayout(ft.Container):
         )
 
     def _build_main_area(self) -> ft.Control:
+        """
+        Construye el área principal con el header y el AnimatedSwitcher de contenido.
+
+        Retorna:
+            ft.Control: Contenedor expandible con header y área de contenido animada.
+        """
         outer_padding = 0 if self.fill_viewport else 24
         column_spacing = 0 if self.fill_viewport else 20
 
@@ -147,6 +202,12 @@ class MainLayout(ft.Container):
         )
 
     def _build_header(self) -> ft.Control:
+        """
+        Construye el header con título, subtítulo, botón de retroceso y acciones.
+
+        Retorna:
+            ft.Control: Contenedor con la fila de elementos del header.
+        """
         header_padding = (
             ft.padding.symmetric(horizontal=16, vertical=12)
             if self.fill_viewport

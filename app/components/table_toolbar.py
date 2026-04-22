@@ -1,3 +1,5 @@
+"""Barra de herramientas estándar para vistas de listado (búsqueda, filtros, acciones)."""
+
 from __future__ import annotations
 
 from typing import Callable, Optional
@@ -7,10 +9,10 @@ import flet as ft
 
 class TableToolbar(ft.Container):
     """
-    Barra superior estándar para listados:
-      - Campo de búsqueda con debounce (filtrado dinámico).
-      - Switch opcional para alternar "Mostrar inactivos".
-      - Slot de acciones a la derecha (botones de crear, refrescar, etc.).
+    Barra superior estándar para vistas de listado.
+
+    Incluye campo de búsqueda con filtrado dinámico, switch opcional para
+    mostrar/ocultar inactivos, y un slot de acciones a la derecha.
     """
 
     def __init__(
@@ -21,6 +23,16 @@ class TableToolbar(ft.Container):
         show_inactive_label: str = "Mostrar inactivos",
         actions: Optional[list[ft.Control]] = None,
     ) -> None:
+        """
+        Inicializa la barra de herramientas.
+
+        Argumentos:
+            on_search (Callable[[str], None]): Callback invocado al cambiar el texto de búsqueda.
+            on_toggle_inactive (Optional[Callable[[bool], None]]): Callback al alternar el switch de inactivos.
+            search_placeholder (str): Texto de placeholder del campo de búsqueda.
+            show_inactive_label (str): Etiqueta del switch de inactivos.
+            actions (Optional[list[ft.Control]]): Controles adicionales a mostrar a la derecha.
+        """
         super().__init__()
         self._on_search = on_search
         self._on_toggle_inactive = on_toggle_inactive
@@ -59,16 +71,27 @@ class TableToolbar(ft.Container):
         )
 
     # ---------- API ----------
+
     @property
     def query(self) -> str:
+        """
+        Devuelve el texto de búsqueda actual normalizado.
+
+        Retorna:
+            str: Texto del campo de búsqueda sin espacios extremos.
+        """
         return (self._search_field.value or "").strip()
 
     def clear_search(self) -> None:
+        """
+        Limpia el campo de búsqueda y refresca el control si está montado en la página.
+        """
         self._search_field.value = ""
         if self.page:
             self._search_field.update()
 
     # ---------- Internos ----------
+
     def _handle_search_change(self, _: ft.ControlEvent) -> None:
         # El filtrado en memoria es barato; si en el futuro se pasa a BD
         # se puede añadir debounce con Timer.

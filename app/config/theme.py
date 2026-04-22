@@ -1,9 +1,13 @@
+"""Definición de temas claro/oscuro y configuración inicial de la página Flet."""
+
 import flet as ft
 
 from app.config.theme_store import load_theme_mode
 
 
 class AppTheme:
+    """Paleta de colores y temas Material3 de la aplicación."""
+
     # Paleta principal
     PRIMARY = "#2563EB"        # Azul moderno
     PRIMARY_DARK = "#1D4ED8"
@@ -23,6 +27,12 @@ class AppTheme:
 
     @staticmethod
     def create_theme() -> ft.Theme:
+        """
+        Genera el tema claro Material3.
+
+        Retorna:
+            ft.Theme: Tema claro configurado con la paleta de la aplicación.
+        """
         return ft.Theme(
             color_scheme=ft.ColorScheme(
                 primary=AppTheme.PRIMARY,
@@ -39,6 +49,12 @@ class AppTheme:
 
     @staticmethod
     def create_dark_theme() -> ft.Theme:
+        """
+        Genera el tema oscuro Material3.
+
+        Retorna:
+            ft.Theme: Tema oscuro configurado con la paleta de la aplicación.
+        """
         return ft.Theme(
             color_scheme=ft.ColorScheme(
                 primary="#60A5FA",
@@ -55,6 +71,12 @@ class AppTheme:
 
 
 def configure_page(page: ft.Page) -> None:
+    """
+    Aplica tema, dimensiones mínimas y propiedades base a la página Flet.
+
+    Argumentos:
+        page (ft.Page): La página principal de la aplicación Flet.
+    """
     page.theme = AppTheme.create_theme()
     page.dark_theme = AppTheme.create_dark_theme()
     page.theme_mode = load_theme_mode(page, default=ft.ThemeMode.LIGHT)

@@ -1,8 +1,11 @@
+"""Modelo de dominio para la entidad Personal."""
+
 from dataclasses import dataclass
 from typing import Optional
 
 @dataclass
 class Personal:
+    """Representa un empleado tal como está almacenado en la base de datos."""
     num_empleado: str
     id_puesto: int
     id_area: int

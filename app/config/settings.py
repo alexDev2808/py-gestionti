@@ -1,9 +1,12 @@
+"""Configuración global de la aplicación cargada desde variables de entorno."""
+
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
 class Settings:
+    """Variables de conexión y parámetros generales leídos de .env al arrancar."""
     APP_NAME = os.getenv("APP_NAME", "GestionTI")
 
     DB_SERVER = os.getenv("DB_SERVER", "localhost")

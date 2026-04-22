@@ -1,9 +1,12 @@
+"""DTO para la actualización de datos de un empleado existente."""
+
 from dataclasses import dataclass
 from typing import Optional
 
 
 @dataclass
 class PersonalUpdateDTO:
+    """Datos editables de un empleado para la operación de actualización."""
     num_empleado: str
     id_puesto: int
     id_area: int

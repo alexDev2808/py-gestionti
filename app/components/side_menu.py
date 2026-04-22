@@ -1,3 +1,5 @@
+"""Menú lateral de navegación principal con perfil de usuario y opción de logout."""
+
 from dataclasses import dataclass
 from typing import Callable, Optional
 
@@ -34,6 +36,19 @@ class SideMenu(ft.Container):
         user_name: str = "Usuario",
         user_role: str = "Administrador",
     ):
+        """
+        Inicializa el menú lateral con los ítems de navegación y datos del usuario.
+
+        Argumentos:
+            items (list[MenuItem]): Lista de ítems de navegación a mostrar.
+            selected_key (Optional[str]): Clave del ítem seleccionado inicialmente.
+            on_select (Optional[Callable[[str], None]]): Callback invocado al seleccionar un ítem.
+            on_profile (Optional[Callable[[], None]]): Callback invocado al pulsar "Perfil".
+            on_logout (Optional[Callable[[], None]]): Callback invocado al pulsar "Cerrar sesión".
+            app_name (str): Nombre de la aplicación mostrado en el encabezado del menú.
+            user_name (str): Nombre del usuario autenticado mostrado en el pie del menú.
+            user_role (str): Rol del usuario autenticado mostrado bajo el nombre.
+        """
         super().__init__()
         self._items = items
         self._selected_key = selected_key or (items[0].key if items else None)
@@ -51,7 +66,12 @@ class SideMenu(ft.Container):
 
     # ---------- API pública ----------
     def select(self, key: str) -> None:
-        """Cambia programáticamente el item seleccionado y redibuja."""
+        """
+        Cambia programáticamente el ítem seleccionado y redibuja el menú.
+
+        Argumentos:
+            key (str): Clave del ítem de navegación a seleccionar.
+        """
         if key == self._selected_key:
             return
         self._selected_key = key
@@ -61,6 +81,12 @@ class SideMenu(ft.Container):
 
     # ---------- Construcción ----------
     def _build(self) -> ft.Control:
+        """
+        Construye el árbol de controles del menú lateral completo.
+
+        Retorna:
+            ft.Control: Columna con header, ítems de navegación y footer de usuario.
+        """
         return ft.Column(
             expand=True,
             spacing=0,
@@ -77,6 +103,12 @@ class SideMenu(ft.Container):
         )
 
     def _build_header(self) -> ft.Control:
+        """
+        Construye la cabecera del menú con el ícono y nombre de la aplicación.
+
+        Retorna:
+            ft.Control: Fila con el logo y el nombre de la aplicación.
+        """
         return ft.Row(
             alignment=ft.MainAxisAlignment.START,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -104,6 +136,12 @@ class SideMenu(ft.Container):
         )
 
     def _build_footer(self) -> ft.Control:
+        """
+        Construye el pie del menú con la tarjeta de usuario y los botones de Perfil y Cerrar sesión.
+
+        Retorna:
+            ft.Control: Columna con la tarjeta de usuario y los botones de acción.
+        """
         return ft.Column(
             spacing=8,
             controls=[
@@ -165,6 +203,18 @@ class SideMenu(ft.Container):
         on_click: Callable[[ft.ControlEvent], None],
         danger: bool = False,
     ) -> ft.Control:
+        """
+        Crea un botón de acción del footer (Perfil o Cerrar sesión).
+
+        Argumentos:
+            icon (str): Nombre del ícono de Flet a mostrar.
+            label (str): Texto del botón.
+            on_click (Callable[[ft.ControlEvent], None]): Callback invocado al pulsar el botón.
+            danger (bool): Si es True, usa el color de error para indicar acción destructiva.
+
+        Retorna:
+            ft.Control: Contenedor interactivo con ícono y texto.
+        """
         color = ft.Colors.ERROR if danger else ft.Colors.ON_SURFACE
         return ft.Container(
             border_radius=10,
@@ -182,11 +232,23 @@ class SideMenu(ft.Container):
 
     # ---------- Items de navegación ----------
     def _refresh_items(self) -> None:
+        """
+        Regenera los controles de navegación reflejando el ítem actualmente seleccionado.
+        """
         self._nav_column.controls = [
             self._build_nav_item(item) for item in self._items
         ]
 
     def _build_nav_item(self, item: MenuItem) -> ft.Control:
+        """
+        Construye un ítem de navegación con el estilo visual correcto según si está seleccionado.
+
+        Argumentos:
+            item (MenuItem): Datos del ítem (clave, etiqueta, íconos).
+
+        Retorna:
+            ft.Control: Contenedor interactivo del ítem de navegación.
+        """
         is_selected = item.key == self._selected_key
         bg = ft.Colors.PRIMARY_CONTAINER if is_selected else ft.Colors.TRANSPARENT
         fg = (
@@ -219,6 +281,12 @@ class SideMenu(ft.Container):
         )
 
     def _handle_select(self, key: str) -> None:
+        """
+        Actualiza la selección visualmente e invoca el callback on_select.
+
+        Argumentos:
+            key (str): Clave del ítem pulsado por el usuario.
+        """
         self.select(key)
         if self._on_select:
             self._on_select(key)

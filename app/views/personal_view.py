@@ -1,3 +1,5 @@
+"""Vista de gestión de personal: listado con búsqueda, paginación y edición inline."""
+
 from __future__ import annotations
 
 import asyncio
@@ -14,6 +16,7 @@ from app.views.base import View
 
 
 class PersonalView(View):
+    """Lista empleados en tabla paginada; permite buscar, filtrar, editar y activar/desactivar."""
     key = "personal"
     title = "Personal"
     subtitle = "Gestión del personal de la organización"
@@ -104,6 +107,12 @@ class PersonalView(View):
     # ---------- Ciclo de vida ----------
 
     def build(self) -> ft.Control:
+        """
+        Construye el árbol de controles de la vista (tabla, toolbar, paginación).
+
+        Retorna:
+            ft.Control: Columna raíz con todos los controles de la vista.
+        """
         pagination_bar = ft.Container(
             padding=ft.padding.symmetric(horizontal=8, vertical=6),
             content=ft.Row(
@@ -161,6 +170,9 @@ class PersonalView(View):
         )
 
     def on_enter(self) -> None:
+        """
+        Hook invocado al activar la vista. Registra el listener de resize y carga datos si es necesario.
+        """
         resize_attr = self._resize_attr()
         self._prev_on_resized = getattr(self.page, resize_attr, None)
         setattr(self.page, resize_attr, self._handle_page_resized)
@@ -170,6 +182,9 @@ class PersonalView(View):
             self._load_data()
 
     def on_leave(self) -> None:
+        """
+        Hook invocado al desactivar la vista. Restaura el listener de resize original.
+        """
         resize_attr = self._resize_attr()
         if getattr(self.page, resize_attr, None) == self._handle_page_resized:
             setattr(self.page, resize_attr, self._prev_on_resized)
@@ -178,16 +193,34 @@ class PersonalView(View):
     # ---------- Handlers de toolbar ----------
 
     def _on_search(self, query: str) -> None:
+        """
+        Aplica el filtro de texto y redibuja la tabla.
+
+        Argumentos:
+            query (str): Texto de búsqueda normalizado proveniente de la toolbar.
+        """
         self._controller.set_query(query)
         self._render_page()
 
     def _on_toggle_inactive(self, include_inactive: bool) -> None:
+        """
+        Cambia el filtro de inactivos y recarga datos si el estado cambió.
+
+        Argumentos:
+            include_inactive (bool): True para incluir empleados inactivos en el listado.
+        """
         if self._controller.set_include_inactive(bool(include_inactive)):
             self._load_data()
 
     # ---------- Handlers de paginación ----------
 
     def _on_page_size_change(self, e: ft.ControlEvent) -> None:
+        """
+        Actualiza el tamaño de página cuando el usuario cambia el dropdown.
+
+        Argumentos:
+            e (ft.ControlEvent): Evento de cambio del Dropdown de filas por página.
+        """
         try:
             new_size = int(e.control.value)
         except (TypeError, ValueError):
@@ -196,12 +229,24 @@ class PersonalView(View):
             self._render_page()
 
     def _goto_page(self, index: int) -> None:
+        """
+        Navega a la página indicada y redibuja la tabla si el índice cambió.
+
+        Argumentos:
+            index (int): Índice basado en cero de la página destino.
+        """
         if self._controller.goto_page(index):
             self._render_page()
 
     # ---------- Modal de edición ----------
 
     def _show_edit_modal(self, personal: PersonalResponseDTO) -> None:
+        """
+        Abre el modal de edición para el empleado indicado.
+
+        Argumentos:
+            personal (PersonalResponseDTO): Empleado cuyos datos se cargarán en el formulario.
+        """
         try:
             self._current_modal = PersonalEditModal(
                 personal=personal,
@@ -214,6 +259,9 @@ class PersonalView(View):
             self._show_snackbar(f"Error al abrir el formulario: {err}", error=True)
 
     def _close_modal(self) -> None:
+        """
+        Cierra el modal activo mediante page.pop_dialog() y libera su referencia.
+        """
         if self._current_modal:
             try:
                 self.page.pop_dialog()
@@ -222,6 +270,13 @@ class PersonalView(View):
         self._current_modal = None
 
     def _on_modal_save(self, personal: PersonalResponseDTO, form_values: dict[str, str]) -> None:
+        """
+        Delega el guardado al controller, cierra el modal y muestra el resultado al usuario.
+
+        Argumentos:
+            personal (PersonalResponseDTO): Empleado original que se está editando.
+            form_values (dict[str, str]): Valores crudos capturados del formulario de edición.
+        """
         ok, message = self._controller.save_personal(personal, form_values)
         self._close_modal()
         if ok:
@@ -233,6 +288,9 @@ class PersonalView(View):
     # ---------- Carga de datos ----------
 
     def _load_data(self) -> None:
+        """
+        Lanza la carga asíncrona de empleados desde el controller y actualiza la tabla al terminar.
+        """
         self._set_progress(True)
         self._set_status("Cargando…")
         self._rows_container.controls = []
@@ -267,6 +325,12 @@ class PersonalView(View):
     # ---------- Toggle de estado ----------
 
     def _toggle_personal_status(self, personal: PersonalResponseDTO) -> None:
+        """
+        Activa o desactiva un empleado de forma asíncrona y recarga la tabla al finalizar.
+
+        Argumentos:
+            personal (PersonalResponseDTO): Empleado al que se le cambiará el estado activo/inactivo.
+        """
         async def toggle_async() -> None:
             try:
                 ok, message = await asyncio.to_thread(self._controller.toggle_status, personal)
@@ -286,6 +350,12 @@ class PersonalView(View):
     # ---------- Construcción de tabla ----------
 
     def _build_header_row(self) -> ft.Control:
+        """
+        Construye la fila de encabezados de la tabla con los títulos de _COLUMNS.
+
+        Retorna:
+            ft.Control: Contenedor con los encabezados de columna.
+        """
         cells = [
             ft.Container(
                 expand=True,
@@ -301,6 +371,15 @@ class PersonalView(View):
         )
 
     def _build_row(self, item: PersonalResponseDTO) -> ft.Control:
+        """
+        Construye una fila de la tabla con los datos y botones de acción del empleado.
+
+        Argumentos:
+            item (PersonalResponseDTO): Empleado cuyos datos se representan en la fila.
+
+        Retorna:
+            ft.Control: Contenedor con las celdas y botones de acción.
+        """
         values = self._row_values(item)
         cells = [
             ft.Container(
@@ -343,6 +422,15 @@ class PersonalView(View):
         )
 
     def _row_values(self, item: PersonalResponseDTO) -> list[str]:
+        """
+        Extrae los valores de celda de un empleado siguiendo el orden definido en _COLUMNS.
+
+        Argumentos:
+            item (PersonalResponseDTO): Empleado del que se extraen los valores.
+
+        Retorna:
+            list[str]: Lista de strings listos para mostrar en las celdas de la fila.
+        """
         out: list[str] = []
         for _, field in self._COLUMNS:
             if field == "_actions":
@@ -359,6 +447,9 @@ class PersonalView(View):
         return out
 
     def _render_page(self) -> None:
+        """
+        Redibuja las filas de la tabla y actualiza el estado de los controles de paginación.
+        """
         page_items = self._controller.current_page_items()
         self._rows_container.controls = [self._build_row(it) for it in page_items]
 
@@ -377,19 +468,40 @@ class PersonalView(View):
     # ---------- Alto dinámico de la tabla ----------
 
     def _resize_attr(self) -> str:
+        """
+        Devuelve el nombre correcto del atributo de resize según la versión de Flet instalada.
+
+        Retorna:
+            str: "on_resize" si está disponible, "on_resized" en versiones anteriores.
+        """
         return "on_resize" if hasattr(self.page, "on_resize") else "on_resized"
 
     def _compute_table_height(self) -> float:
+        """
+        Calcula la altura óptima de la tabla en función del alto actual de la ventana.
+
+        Retorna:
+            float: Altura en píxeles para el contenedor de la tabla.
+        """
         page_height = getattr(self.page, "height", None) or 0
         if page_height <= 0:
             return float(self._min_table_height + 240)
         return float(max(self._min_table_height, page_height - self._chrome_offset))
 
     def _apply_table_height(self) -> None:
+        """
+        Aplica la altura calculada al contenedor de la tabla y fuerza su actualización.
+        """
         self._table_container.height = self._compute_table_height()
         self._safe_update()
 
     def _handle_page_resized(self, e) -> None:
+        """
+        Callback de resize de la ventana. Propaga el evento al handler anterior y reajusta la tabla.
+
+        Argumentos:
+            e: Evento de resize emitido por Flet al cambiar el tamaño de la ventana.
+        """
         if callable(self._prev_on_resized):
             try:
                 self._prev_on_resized(e)
@@ -400,14 +512,33 @@ class PersonalView(View):
     # ---------- Utilidades ----------
 
     def _set_progress(self, visible: bool) -> None:
+        """
+        Muestra u oculta la barra de progreso de carga.
+
+        Argumentos:
+            visible (bool): True para mostrar la barra; False para ocultarla.
+        """
         self._progress.visible = visible
         self._safe_update()
 
     def _set_status(self, text: str) -> None:
+        """
+        Actualiza el texto de estado informativo bajo la barra de progreso.
+
+        Argumentos:
+            text (str): Mensaje a mostrar (p.ej. número de registros o descripción del error).
+        """
         self._status_text.value = text
         self._safe_update()
 
     def _show_snackbar(self, message: str, error: bool = False) -> None:
+        """
+        Muestra un snackbar de retroalimentación al usuario.
+
+        Argumentos:
+            message (str): Texto a mostrar en el snackbar.
+            error (bool): Si es True, el fondo será rojo (error); de lo contrario, verde (éxito).
+        """
         snackbar = ft.SnackBar(
             ft.Text(message),
             bgcolor="#F44336" if error else "#4CAF50",
@@ -417,6 +548,9 @@ class PersonalView(View):
         self._safe_update()
 
     def _safe_update(self) -> None:
+        """
+        Llama a page.update() capturando cualquier excepción para no interrumpir el flujo.
+        """
         try:
             self.page.update()
         except Exception:

@@ -1,3 +1,5 @@
+"""Vista de inicio de sesión."""
+
 from __future__ import annotations
 
 from typing import Callable, Optional
@@ -22,6 +24,14 @@ class LoginView(ft.Container):
         on_success: Callable[[AuthUser], None],
         app_name: str = "Gestión TI",
     ) -> None:
+        """
+        Inicializa la vista de login con el servicio de autenticación y el callback de éxito.
+
+        Argumentos:
+            auth_service (AuthService): Servicio que valida las credenciales del usuario.
+            on_success (Callable[[AuthUser], None]): Callback invocado con el usuario autenticado al completar el login.
+            app_name (str): Nombre de la aplicación mostrado en el encabezado de la tarjeta.
+        """
         super().__init__()
         self._auth = auth_service
         self._on_success = on_success
@@ -68,6 +78,12 @@ class LoginView(ft.Container):
 
     # ---------- Construcción ----------
     def _build(self) -> ft.Control:
+        """
+        Construye la tarjeta de login centrada en pantalla.
+
+        Retorna:
+            ft.Control: Tarjeta con el formulario de autenticación.
+        """
         card = ft.Container(
             width=380,
             padding=28,
@@ -96,6 +112,12 @@ class LoginView(ft.Container):
         return card
 
     def _build_header(self) -> ft.Control:
+        """
+        Construye el encabezado de la tarjeta con el logo y nombre de la aplicación.
+
+        Retorna:
+            ft.Control: Fila con el ícono y los textos de presentación.
+        """
         return ft.Row(
             alignment=ft.MainAxisAlignment.START,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -135,6 +157,12 @@ class LoginView(ft.Container):
 
     # ---------- Lógica ----------
     def _submit(self) -> None:
+        """
+        Valida el formulario, llama al servicio de autenticación e invoca on_success si el login fue correcto.
+
+        Lanza:
+            AuthError: Capturada internamente; muestra el mensaje de error en la vista.
+        """
         self._set_error(None)
         self._set_loading(True)
         try:
@@ -157,6 +185,12 @@ class LoginView(ft.Container):
         self._on_success(user)
 
     def _set_loading(self, loading: bool) -> None:
+        """
+        Activa o desactiva el estado de carga bloqueando el formulario mientras se autentica.
+
+        Argumentos:
+            loading (bool): True para bloquear el formulario y mostrar el spinner; False para restaurarlo.
+        """
         self._progress.visible = loading
         self._submit_button.disabled = loading
         self._username.disabled = loading
@@ -165,6 +199,12 @@ class LoginView(ft.Container):
             self.update()
 
     def _set_error(self, message: Optional[str]) -> None:
+        """
+        Muestra u oculta el mensaje de error bajo el formulario de login.
+
+        Argumentos:
+            message (Optional[str]): Texto del error a mostrar, o None para ocultarlo.
+        """
         if message:
             self._error_text.value = message
             self._error_text.visible = True

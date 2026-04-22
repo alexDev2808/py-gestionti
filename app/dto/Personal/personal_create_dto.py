@@ -1,8 +1,11 @@
+"""DTO para el registro de un nuevo empleado."""
+
 from dataclasses import dataclass
 from typing import Optional
 
 @dataclass
 class PersonalCreateDTO:
+    """Datos requeridos para registrar un nuevo empleado en el sistema."""
     num_empleado: str
     id_puesto: int
     id_area: int

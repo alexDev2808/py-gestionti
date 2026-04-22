@@ -1,3 +1,5 @@
+"""Controlador de Personal: gestiona estado de tabla y orquesta operaciones de negocio."""
+
 from __future__ import annotations
 
 import math
@@ -10,6 +12,8 @@ from app.services.personal_service import PersonalService
 
 
 class PersonalController:
+    """Gestiona estado de paginación/filtros y delega al servicio las operaciones CRUD."""
+
     page_size_options: list[int] = [10, 25, 50, 100]
 
     def __init__(self, service: Optional[PersonalService] = None):
@@ -26,18 +30,35 @@ class PersonalController:
     # ---------- Datos ----------
 
     def fetch_items(self) -> list[PersonalResponseDTO]:
-        """Llama al servicio y devuelve la lista (síncrono, para ejecutar en thread)."""
+        """
+        Llama al servicio y devuelve la lista de empleados (síncrono, para ejecutar en thread).
+
+        Retorna:
+            list[PersonalResponseDTO]: Lista de empleados según el filtro de inactivos activo.
+
+        Lanza:
+            RuntimeError: Si el servicio devuelve un error.
+        """
         ok, message, data = self.service.listar_personal(include_inactive=self.include_inactive)
         if not ok:
             raise RuntimeError(message or "No se pudo obtener el listado.")
         return list(data or [])
 
     def set_all_items(self, items: list[PersonalResponseDTO]) -> None:
+        """
+        Reemplaza la lista completa de empleados y aplica los filtros activos.
+
+        Argumentos:
+            items (list[PersonalResponseDTO]): Nueva lista de empleados cargada desde el servicio.
+        """
         self.all_items = list(items)
         self.loaded = True
         self.apply_filters()
 
     def apply_filters(self) -> None:
+        """
+        Filtra all_items según la query activa y actualiza la lista filtered.
+        """
         q = self.query
 
         def matches(item: PersonalResponseDTO) -> bool:
@@ -55,12 +76,26 @@ class PersonalController:
     # ---------- Filtros ----------
 
     def set_query(self, query: str) -> None:
+        """
+        Actualiza el criterio de búsqueda, resetea la paginación y filtra.
+
+        Argumentos:
+            query (str): Texto de búsqueda ingresado por el usuario.
+        """
         self.query = (query or "").strip().lower()
         self.page_index = 0
         self.apply_filters()
 
     def set_include_inactive(self, value: bool) -> bool:
-        """Devuelve True si el valor cambió."""
+        """
+        Activa o desactiva el filtro de empleados inactivos.
+
+        Argumentos:
+            value (bool): True para incluir inactivos, False para ocultarlos.
+
+        Retorna:
+            bool: True si el valor cambió (requiere recargar datos), False si era el mismo.
+        """
         if value == self.include_inactive:
             return False
         self.include_inactive = value
@@ -70,10 +105,24 @@ class PersonalController:
     # ---------- Paginación ----------
 
     def total_pages(self) -> int:
+        """
+        Calcula el número total de páginas según la lista filtrada y el tamaño de página.
+
+        Retorna:
+            int: Número total de páginas (mínimo 1).
+        """
         return max(1, math.ceil(len(self.filtered) / self.page_size)) if self.filtered else 1
 
     def goto_page(self, index: int) -> bool:
-        """Devuelve True si la página cambió."""
+        """
+        Navega a una página específica dentro del rango válido.
+
+        Argumentos:
+            index (int): Índice de la página destino (base 0).
+
+        Retorna:
+            bool: True si la página cambió, False si ya estaba en esa página.
+        """
         clamped = max(0, min(index, self.total_pages() - 1))
         if clamped == self.page_index:
             return False
@@ -81,7 +130,15 @@ class PersonalController:
         return True
 
     def set_page_size(self, size: int) -> bool:
-        """Devuelve True si el tamaño cambió."""
+        """
+        Cambia el número de filas por página y resetea a la primera página.
+
+        Argumentos:
+            size (int): Nuevo tamaño de página.
+
+        Retorna:
+            bool: True si el tamaño cambió, False si era el mismo.
+        """
         if size == self.page_size:
             return False
         self.page_size = size
@@ -89,6 +146,12 @@ class PersonalController:
         return True
 
     def current_page_items(self) -> list[PersonalResponseDTO]:
+        """
+        Devuelve el slice de filtered correspondiente a la página actual.
+
+        Retorna:
+            list[PersonalResponseDTO]: Empleados de la página actual.
+        """
         total = self.total_pages()
         self.page_index = max(0, min(self.page_index, total - 1))
         start = self.page_index * self.page_size
@@ -99,7 +162,16 @@ class PersonalController:
     def save_personal(
         self, personal: PersonalResponseDTO, form_values: dict[str, str]
     ) -> tuple[bool, str]:
-        """Valida los valores del formulario y llama al servicio. Devuelve (ok, mensaje)."""
+        """
+        Valida los valores del formulario y llama al servicio para guardar los cambios.
+
+        Argumentos:
+            personal (PersonalResponseDTO): Empleado original que se está editando.
+            form_values (dict[str, str]): Valores crudos del formulario de edición.
+
+        Retorna:
+            tuple[bool, str]: (True, mensaje de éxito) o (False, descripción del error).
+        """
         try:
             valores: dict = {}
             for key, raw in form_values.items():
@@ -140,7 +212,15 @@ class PersonalController:
             return False, f"Error inesperado: {err}"
 
     def toggle_status(self, personal: PersonalResponseDTO) -> tuple[bool, str]:
-        """Activa o desactiva un personal. Devuelve (ok, mensaje)."""
+        """
+        Activa o desactiva un empleado según su estado actual.
+
+        Argumentos:
+            personal (PersonalResponseDTO): Empleado cuyo estado se desea cambiar.
+
+        Retorna:
+            tuple[bool, str]: (True, mensaje de éxito) o (False, descripción del error).
+        """
         if personal.activo:
             ok, message, _ = self.service.eliminar_personal(personal.num_empleado)
         else:
@@ -150,6 +230,15 @@ class PersonalController:
     # ---------- Métodos CRUD adicionales (compatibilidad) ----------
 
     def crear_personal(self, data: dict):
+        """
+        Crea un nuevo empleado a partir de un diccionario de datos.
+
+        Argumentos:
+            data (dict): Datos del empleado con las mismas claves que PersonalCreateDTO.
+
+        Retorna:
+            tuple[bool, str, Optional[PersonalResponseDTO]]: Resultado del servicio.
+        """
         dto = PersonalCreateDTO(
             num_empleado=data["num_empleado"],
             id_puesto=data["id_puesto"],
@@ -170,4 +259,13 @@ class PersonalController:
         return self.service.crear_personal(dto)
 
     def obtener_personal(self, num_empleado: str):
+        """
+        Delega al servicio la búsqueda de un empleado por número.
+
+        Argumentos:
+            num_empleado (str): Identificador único del empleado.
+
+        Retorna:
+            tuple[bool, str, Optional[PersonalResponseDTO]]: Resultado del servicio.
+        """
         return self.service.obtener_personal(num_empleado)

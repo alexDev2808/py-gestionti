@@ -1,3 +1,5 @@
+"""Servicio de auditoría de eventos de sesión (login, logout, bloqueos, acceso denegado)."""
+
 from __future__ import annotations
 
 import logging
@@ -9,6 +11,7 @@ _logger = logging.getLogger(__name__)
 
 
 class AuditEvent:
+    """Constantes de tipos de eventos registrables en auditoría."""
     LOGIN_OK = "LOGIN_OK"
     LOGIN_FAIL = "LOGIN_FAIL"
     LOGOUT = "LOGOUT"
@@ -17,14 +20,28 @@ class AuditEvent:
 
 
 class AuditService:
+    """Registra eventos de sesión de forma no bloqueante; nunca interrumpe el flujo normal."""
+
     def __init__(self, repository: Optional[SessionAuditRepository] = None) -> None:
+        """
+        Inicializa el servicio de auditoría con el repositorio de persistencia.
+
+        Argumentos:
+            repository (Optional[SessionAuditRepository]): Repositorio de auditoría;
+                si es None se crea una instancia por defecto.
+        """
         self._repository = repository or SessionAuditRepository()
 
     def log(self, num_empleado: str, event_type: str, detail: Optional[str] = None) -> None:
-        """Registro de eventos de sesión.
+        """
+        Registra un evento de sesión de forma no bloqueante.
 
-        La auditoría NUNCA debe romper el flujo del usuario: si falla el logging
-        se traga la excepción (pero idealmente se reportaría a un sistema de logs).
+        Si el repositorio falla, la excepción se absorbe para no interrumpir el flujo del usuario.
+
+        Argumentos:
+            num_empleado (str): Número de empleado asociado al evento.
+            event_type (str): Tipo de evento (usar las constantes de AuditEvent).
+            detail (Optional[str]): Descripción adicional del evento; puede ser None.
         """
         try:
             self._repository.log(num_empleado, event_type, detail)

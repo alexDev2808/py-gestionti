@@ -1,3 +1,5 @@
+"""Repositorio de acceso a datos para la entidad Personal."""
+
 from typing import List, Optional
 
 from app.config.database import get_connection
@@ -5,7 +7,19 @@ from app.models.Personal import Personal
 
 
 class PersonalRepository:
+    """Encapsula todas las operaciones SQL sobre la tabla Personal."""
+
     def create(self, personal: Personal, password_hash: str) -> Personal:
+        """
+        Inserta un nuevo empleado junto con su hash de contraseña.
+
+        Argumentos:
+            personal (Personal): Datos del empleado a insertar.
+            password_hash (str): Hash de la contraseña inicial del empleado.
+
+        Retorna:
+            Personal: El mismo objeto personal tras la inserción.
+        """
         query = """
             INSERT INTO Personal (
                 id_empleado,
@@ -56,6 +70,15 @@ class PersonalRepository:
         return personal
 
     def _row_to_personal(self, row) -> Personal:
+        """
+        Mapea una fila pyodbc al modelo Personal.
+
+        Argumentos:
+            row: Fila resultado de una consulta pyodbc.
+
+        Retorna:
+            Personal: Instancia del modelo con los datos de la fila.
+        """
         return Personal(
             num_empleado=row.num_empleado,
             id_puesto=row.id_puesto,
@@ -75,6 +98,15 @@ class PersonalRepository:
         )
 
     def get_all(self, include_inactive: bool = False) -> List[Personal]:
+        """
+        Devuelve todos los empleados de la tabla Personal.
+
+        Argumentos:
+            include_inactive (bool): Si es True, incluye empleados con activo = 0.
+
+        Retorna:
+            List[Personal]: Lista de empleados ordenada alfabéticamente.
+        """
         query = """
             SELECT
                 id_empleado AS num_empleado,
@@ -105,6 +137,15 @@ class PersonalRepository:
         return [self._row_to_personal(row) for row in rows]
 
     def get_by_num_empleado(self, num_empleado: str) -> Optional[Personal]:
+        """
+        Busca un empleado por su número de empleado.
+
+        Argumentos:
+            num_empleado (str): Identificador único del empleado.
+
+        Retorna:
+            Optional[Personal]: El empleado encontrado, o None si no existe.
+        """
         query = """
             SELECT
                 id_empleado AS num_empleado,
@@ -137,8 +178,13 @@ class PersonalRepository:
 
     def get_credentials(self, num_empleado: str) -> Optional[tuple[Personal, str]]:
         """
-        Obtiene los datos del empleado junto con el hash/contraseña almacenada
-        en la columna [pass]. Devuelve None si no existe o está inactivo.
+        Obtiene los datos del empleado junto con el hash de contraseña almacenado.
+
+        Argumentos:
+            num_empleado (str): Identificador único del empleado.
+
+        Retorna:
+            Optional[tuple[Personal, str]]: Tupla (empleado, hash) o None si no existe o está inactivo.
         """
         query = """
             SELECT
@@ -174,7 +220,16 @@ class PersonalRepository:
         return personal, password_hash
 
     def update_password(self, num_empleado: str, password_hash: str) -> bool:
-        """Actualiza sólo la contraseña (hash) de un empleado."""
+        """
+        Actualiza únicamente la contraseña (hash) de un empleado.
+
+        Argumentos:
+            num_empleado (str): Identificador del empleado.
+            password_hash (str): Nuevo hash de contraseña a almacenar.
+
+        Retorna:
+            bool: True si se actualizó al menos una fila.
+        """
         query = "UPDATE Personal SET [pass] = ? WHERE id_empleado = ?"
         with get_connection() as conn:
             cursor = conn.cursor()
@@ -184,6 +239,16 @@ class PersonalRepository:
         return affected > 0
 
     def update(self, personal: Personal, password_hash: str) -> Optional[Personal]:
+        """
+        Actualiza todos los campos del empleado, incluyendo la contraseña.
+
+        Argumentos:
+            personal (Personal): Datos actualizados del empleado.
+            password_hash (str): Nuevo hash de contraseña.
+
+        Retorna:
+            Optional[Personal]: El empleado actualizado, o None si no se encontró.
+        """
         query = """
             UPDATE Personal
             SET
@@ -237,7 +302,15 @@ class PersonalRepository:
         return personal
 
     def update_without_password(self, personal: Personal) -> Optional[Personal]:
-        """Actualiza los datos del empleado SIN tocar la columna [pass]."""
+        """
+        Actualiza los datos del empleado sin modificar la columna [pass].
+
+        Argumentos:
+            personal (Personal): Datos actualizados del empleado.
+
+        Retorna:
+            Optional[Personal]: El empleado actualizado, o None si no se encontró.
+        """
         query = """
             UPDATE Personal
             SET
@@ -287,6 +360,15 @@ class PersonalRepository:
         return personal
 
     def delete(self, num_empleado: str) -> bool:
+        """
+        Desactiva un empleado (borrado lógico: activo = 0).
+
+        Argumentos:
+            num_empleado (str): Identificador del empleado a desactivar.
+
+        Retorna:
+            bool: True si se desactivó al menos una fila.
+        """
         query = """
             UPDATE Personal
             SET activo = 0
@@ -302,7 +384,15 @@ class PersonalRepository:
         return affected > 0
 
     def restore(self, num_empleado: str) -> bool:
-        """Reactiva un empleado marcado como inactivo."""
+        """
+        Reactiva un empleado marcado como inactivo.
+
+        Argumentos:
+            num_empleado (str): Identificador del empleado a reactivar.
+
+        Retorna:
+            bool: True si se reactivó al menos una fila.
+        """
         query = """
             UPDATE Personal
             SET activo = 1

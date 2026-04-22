@@ -1,3 +1,5 @@
+"""Componente modal para editar los datos de un empleado."""
+
 from __future__ import annotations
 
 from typing import Callable
@@ -16,6 +18,14 @@ class PersonalEditModal:
         on_save: Callable[[dict[str, str]], None],
         on_cancel: Callable[[], None],
     ):
+        """
+        Inicializa el modal con los datos del empleado y los callbacks de acción.
+
+        Argumentos:
+            personal (PersonalResponseDTO): Empleado cuyos datos se van a editar.
+            on_save (Callable[[dict[str, str]], None]): Callback invocado al confirmar; recibe los valores del formulario.
+            on_cancel (Callable[[], None]): Callback invocado al cancelar la edición.
+        """
         self._personal = personal
         self._on_save = on_save
         self._on_cancel = on_cancel
@@ -25,6 +35,12 @@ class PersonalEditModal:
     # ---------- Construcción ----------
 
     def _build_fields(self) -> dict[str, ft.TextField]:
+        """
+        Crea los campos del formulario pre-poblados con los datos actuales del empleado.
+
+        Retorna:
+            dict[str, ft.TextField]: Diccionario de campos indexados por nombre de atributo.
+        """
         p = self._personal
         return {
             "nombres": ft.TextField(label="Nombres", value=p.nombres, width=400),
@@ -43,6 +59,12 @@ class PersonalEditModal:
         }
 
     def _build_dialog(self) -> ft.AlertDialog:
+        """
+        Construye el AlertDialog con el formulario y los botones de acción.
+
+        Retorna:
+            ft.AlertDialog: Diálogo listo para mostrar con page.show_dialog().
+        """
         return ft.AlertDialog(
             title=ft.Text(f"Editar Personal: {self._personal.num_empleado}"),
             content=ft.Container(
@@ -63,4 +85,10 @@ class PersonalEditModal:
     # ---------- API ----------
 
     def get_form_values(self) -> dict[str, str]:
+        """
+        Devuelve los valores actuales de todos los campos del formulario.
+
+        Retorna:
+            dict[str, str]: Diccionario con los valores crudos de cada campo.
+        """
         return {key: field.value for key, field in self._fields.items()}

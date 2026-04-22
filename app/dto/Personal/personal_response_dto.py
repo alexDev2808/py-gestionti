@@ -1,9 +1,12 @@
+"""DTO de respuesta para la entidad Personal."""
+
 from dataclasses import dataclass
 from typing import Optional
 
 
 @dataclass
 class PersonalResponseDTO:
+    """Datos de un empleado expuestos hacia la capa de presentación (solo lectura)."""
     num_empleado: str
     id_puesto: int
     id_area: int

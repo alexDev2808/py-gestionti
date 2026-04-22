@@ -1,3 +1,5 @@
+"""Servicio de negocio para la gestión de empleados."""
+
 from __future__ import annotations
 
 import hashlib
@@ -11,14 +13,35 @@ from app.repositories.personal_repository import PersonalRepository
 
 
 class PersonalService:
+    """Orquesta validaciones, transformaciones y llamadas al repositorio para empleados."""
+
     def __init__(self, repository: Optional[PersonalRepository] = None):
         self.repository = repository or PersonalRepository()
 
     def _generar_password_inicial(self, apellido_paterno: str, num_empleado: str) -> str:
+        """
+        Genera el hash SHA-256 de (apellido_paterno + num_empleado) como contraseña inicial.
+
+        Argumentos:
+            apellido_paterno (str): Apellido paterno del empleado.
+            num_empleado (str): Número de empleado.
+
+        Retorna:
+            str: Hash SHA-256 en formato hexadecimal.
+        """
         password_base = f"{apellido_paterno}{num_empleado}"
         return hashlib.sha256(password_base.encode("utf-8")).hexdigest()
 
     def _to_response_dto(self, personal: Personal) -> PersonalResponseDTO:
+        """
+        Convierte un modelo Personal en su DTO de respuesta.
+
+        Argumentos:
+            personal (Personal): Instancia del modelo de dominio.
+
+        Retorna:
+            PersonalResponseDTO: DTO listo para exponer a la capa de presentación.
+        """
         return PersonalResponseDTO(
             num_empleado=personal.num_empleado,
             id_puesto=personal.id_puesto,
@@ -38,6 +61,18 @@ class PersonalService:
         )
 
     def _validar_dto(self, dto) -> None:
+        """
+        Valida los campos obligatorios del DTO.
+
+        Argumentos:
+            dto: DTO de creación o actualización de personal.
+
+        Retorna:
+            None
+
+        Lanza:
+            ValueError: Si algún campo obligatorio está vacío.
+        """
         if not dto.num_empleado.strip():
             raise ValueError("El número de empleado es obligatorio.")
         if not dto.apellido_paterno.strip():
@@ -50,6 +85,15 @@ class PersonalService:
             raise ValueError("El correo es obligatorio.")
 
     def crear_personal(self, dto: PersonalCreateDTO):
+        """
+        Crea un nuevo empleado con contraseña inicial generada automáticamente.
+
+        Argumentos:
+            dto (PersonalCreateDTO): Datos del nuevo empleado.
+
+        Retorna:
+            tuple[bool, str, Optional[PersonalResponseDTO]]: (éxito, mensaje, dto creado).
+        """
         self._validar_dto(dto)
 
         existente = self.repository.get_by_num_empleado(dto.num_empleado)
@@ -80,16 +124,44 @@ class PersonalService:
         return True, "Personal creado correctamente.", self._to_response_dto(saved)
 
     def listar_personal(self, include_inactive: bool = False):
+        """
+        Devuelve la lista de empleados activos, o todos si se indica.
+
+        Argumentos:
+            include_inactive (bool): Si es True, incluye empleados desactivados.
+
+        Retorna:
+            tuple[bool, str, list[PersonalResponseDTO]]: (éxito, mensaje, lista de DTOs).
+        """
         items = self.repository.get_all(include_inactive=include_inactive)
         return True, "Listado obtenido correctamente.", [self._to_response_dto(p) for p in items]
 
     def obtener_personal(self, num_empleado: str):
+        """
+        Busca un empleado por su número de empleado.
+
+        Argumentos:
+            num_empleado (str): Identificador único del empleado.
+
+        Retorna:
+            tuple[bool, str, Optional[PersonalResponseDTO]]: (éxito, mensaje, DTO o None).
+        """
         personal = self.repository.get_by_num_empleado(num_empleado)
         if not personal:
             return False, "Personal no encontrado.", None
         return True, "Personal encontrado.", self._to_response_dto(personal)
 
     def actualizar_personal(self, num_empleado: str, dto: PersonalUpdateDTO):
+        """
+        Actualiza los datos del empleado sin modificar su contraseña.
+
+        Argumentos:
+            num_empleado (str): Identificador del empleado a actualizar.
+            dto (PersonalUpdateDTO): Nuevos datos del empleado.
+
+        Retorna:
+            tuple[bool, str, Optional[PersonalResponseDTO]]: (éxito, mensaje, DTO actualizado o None).
+        """
         existente = self.repository.get_by_num_empleado(num_empleado)
         if not existente:
             return False, "Personal no encontrado.", None
@@ -123,12 +195,30 @@ class PersonalService:
         return True, "Personal actualizado correctamente.", self._to_response_dto(updated)
 
     def eliminar_personal(self, num_empleado: str):
+        """
+        Desactiva un empleado (borrado lógico).
+
+        Argumentos:
+            num_empleado (str): Identificador del empleado a desactivar.
+
+        Retorna:
+            tuple[bool, str, None]: (éxito, mensaje, None).
+        """
         deleted = self.repository.delete(num_empleado)
         if not deleted:
             return False, "Personal no encontrado o ya estaba inactivo.", None
         return True, "Personal desactivado correctamente.", None
 
     def reactivar_personal(self, num_empleado: str):
+        """
+        Reactiva un empleado previamente desactivado.
+
+        Argumentos:
+            num_empleado (str): Identificador del empleado a reactivar.
+
+        Retorna:
+            tuple[bool, str, None]: (éxito, mensaje, None).
+        """
         restored = self.repository.restore(num_empleado)
         if not restored:
             return False, "Personal no encontrado o ya estaba activo.", None

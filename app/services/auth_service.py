@@ -20,6 +20,7 @@ _STORAGE_KEY = "auth.user"
 @dataclass(frozen=True)
 class AuthUser:
     """Representa al usuario autenticado en la sesión actual."""
+
     username: str     # num_empleado
     name: str         # nombre completo
     role: Role        # rol lógico
@@ -27,12 +28,33 @@ class AuthUser:
 
     @property
     def role_label(self) -> str:
+        """
+        Devuelve la etiqueta legible del rol para mostrar en la UI.
+
+        Retorna:
+            str: Nombre legible del rol (ej. "Administrador").
+        """
         return self.role.label
 
     def has(self, permission: str) -> bool:
+        """
+        Indica si el usuario posee el permiso indicado.
+
+        Argumentos:
+            permission (str): Clave del permiso a verificar (ej. "personal.edit").
+
+        Retorna:
+            bool: True si el usuario tiene ese permiso.
+        """
         return permission in self.permissions
 
     def to_json(self) -> str:
+        """
+        Serializa el usuario a JSON para su persistencia en client_storage.
+
+        Retorna:
+            str: Representación JSON del usuario autenticado.
+        """
         return json.dumps({
             "username": self.username,
             "name": self.name,
@@ -42,6 +64,15 @@ class AuthUser:
 
     @staticmethod
     def from_json(raw: str) -> "AuthUser":
+        """
+        Reconstruye un AuthUser desde su representación JSON.
+
+        Argumentos:
+            raw (str): Cadena JSON generada previamente por to_json().
+
+        Retorna:
+            AuthUser: Instancia reconstruida del usuario autenticado.
+        """
         data = json.loads(raw)
         return AuthUser(
             username=data["username"],
@@ -52,7 +83,7 @@ class AuthUser:
 
 
 class AuthError(Exception):
-    """Se lanza cuando las credenciales son inválidas."""
+    """Se lanza cuando las credenciales son inválidas o el acceso está bloqueado."""
 
 
 class AuthService:
@@ -80,8 +111,21 @@ class AuthService:
         self._current: Optional[AuthUser] = None
 
     # ---------- API pública ----------
+
     def authenticate(self, num_empleado: str, password: str) -> AuthUser:
-        """Valida credenciales contra la BD. Lanza AuthError si son inválidas."""
+        """
+        Valida las credenciales del usuario contra la base de datos.
+
+        Argumentos:
+            num_empleado (str): Número de empleado ingresado en el formulario.
+            password (str): Contraseña ingresada en el formulario.
+
+        Retorna:
+            AuthUser: Usuario autenticado con su rol y permisos.
+
+        Lanza:
+            AuthError: Si las credenciales son inválidas o la cuenta está bloqueada.
+        """
         num_empleado = (num_empleado or "").strip()
         password = password or ""
 
@@ -139,7 +183,9 @@ class AuthService:
         return user
 
     def logout(self) -> None:
-        """Cierra la sesión actual y borra la persistida."""
+        """
+        Cierra la sesión actual y elimina la sesión persistida en client_storage.
+        """
         username = self._current.username if self._current else ""
         self._current = None
         try:
@@ -151,7 +197,12 @@ class AuthService:
             self._audit.log(username, AuditEvent.LOGOUT)
 
     def restore_session(self) -> Optional[AuthUser]:
-        """Intenta recuperar la sesión persistida. Devuelve el usuario o None."""
+        """
+        Intenta recuperar la sesión guardada en client_storage.
+
+        Retorna:
+            Optional[AuthUser]: El usuario restaurado, o None si no hay sesión guardada.
+        """
         if self._current is not None:
             return self._current
         try:
@@ -169,14 +220,24 @@ class AuthService:
 
     @property
     def current_user(self) -> Optional[AuthUser]:
+        """Usuario autenticado actualmente, o None si no hay sesión activa."""
         return self._current
 
     @property
     def is_authenticated(self) -> bool:
+        """True si hay un usuario autenticado en la sesión actual."""
         return self._current is not None
 
     # ---------- Interno ----------
+
     def _set_current(self, user: AuthUser, persist: bool) -> None:
+        """
+        Actualiza el usuario en memoria y opcionalmente lo persiste en client_storage.
+
+        Argumentos:
+            user (AuthUser): Usuario autenticado a establecer como sesión activa.
+            persist (bool): Si es True, guarda la sesión en client_storage.
+        """
         self._current = user
         if persist:
             try:
@@ -185,6 +246,15 @@ class AuthService:
                 pass
 
     def _register_failure(self, num_empleado: str) -> None:
+        """
+        Registra un intento fallido de login y lanza AuthError con los intentos restantes.
+
+        Argumentos:
+            num_empleado (str): Identificador del usuario que falló la autenticación.
+
+        Lanza:
+            AuthError: Siempre; indica intentos restantes o bloqueo inmediato.
+        """
         remaining = self._attempts.register_failure(num_empleado)
         if remaining == 0:
             self._audit.log(num_empleado, AuditEvent.LOCKED, "Umbral de fallos alcanzado")
@@ -195,14 +265,3 @@ class AuthService:
             f"Número de empleado o contraseña incorrectos. "
             f"Intentos restantes: {remaining}."
         )
-    # @staticmethod
-    # def _role_label(tipo_puesto: Optional[int]) -> str:
-    #     """Traduce el tipo de puesto a una etiqueta legible para la UI."""
-    #     mapping = {
-    #         1: "Administrador",
-    #         2: "Responsable",
-    #         3: "Empleado",
-    #     }
-    #     if tipo_puesto is None:
-    #         return "Usuario"
-    #     return mapping.get(int(tipo_puesto), "Usuario")

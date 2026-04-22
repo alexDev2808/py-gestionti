@@ -21,7 +21,15 @@ _SALT_BYTES = 16
 
 
 def is_hashed(stored: str) -> bool:
-    """Indica si el valor almacenado ya está en formato hash conocido."""
+    """
+    Indica si el valor almacenado ya está en el formato de hash conocido (sha256$salt$hash).
+
+    Argumentos:
+        stored (str): Valor leído de la base de datos.
+
+    Retorna:
+        bool: True si el valor está en formato hash; False si es texto plano o vacío.
+    """
     if not stored:
         return False
     stored = stored.strip()
@@ -29,12 +37,28 @@ def is_hashed(stored: str) -> bool:
 
 
 def needs_rehash(stored: str) -> bool:
-    """True si el valor almacenado debe ser re-hasheado (texto plano o vacío)."""
+    """
+    Indica si el valor almacenado debe ser re-hasheado porque está en texto plano o vacío.
+
+    Argumentos:
+        stored (str): Valor leído de la base de datos.
+
+    Retorna:
+        bool: True si el valor no está en formato hash y requiere migración.
+    """
     return not is_hashed(stored)
 
 
 def hash_password(password: str) -> str:
-    """Genera un hash PBKDF2-SHA256 con salt aleatorio."""
+    """
+    Genera un hash PBKDF2-SHA256 con salt aleatorio listo para almacenar.
+
+    Argumentos:
+        password (str): Contraseña en texto plano a hashear.
+
+    Retorna:
+        str: Hash en formato "sha256$<salt_hex>$<hash_hex>".
+    """
     salt = os.urandom(_SALT_BYTES)
     derived = hashlib.pbkdf2_hmac(_ALGO, password.encode("utf-8"), salt, _ITERATIONS)
     return f"{_ALGO}${salt.hex()}${derived.hex()}"
@@ -42,10 +66,17 @@ def hash_password(password: str) -> str:
 
 def verify_password(password: str, stored: str) -> bool:
     """
-    Verifica la contraseña contra el valor almacenado.
+    Verifica la contraseña contra el valor almacenado en la base de datos.
 
-    - Si `stored` tiene formato de hash conocido, verifica con PBKDF2.
-    - En caso contrario, compara en texto plano (compatibilidad hacia atrás).
+    Si el valor almacenado está en formato hash, verifica con PBKDF2-SHA256.
+    En caso contrario, compara en texto plano para mantener compatibilidad con registros legados.
+
+    Argumentos:
+        password (str): Contraseña en texto plano ingresada por el usuario.
+        stored (str): Valor almacenado en la base de datos (hash o texto plano).
+
+    Retorna:
+        bool: True si la contraseña coincide con el valor almacenado.
     """
     if stored is None:
         return False

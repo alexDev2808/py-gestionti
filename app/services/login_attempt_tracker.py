@@ -38,7 +38,17 @@ class LoginAttemptTracker:
         self._lock = threading.Lock()
 
     # ---------- Consulta ----------
+
     def seconds_until_unlock(self, username: str) -> int:
+        """
+        Devuelve cuántos segundos faltan para que se levante el bloqueo.
+
+        Argumentos:
+            username (str): Identificador del usuario a consultar.
+
+        Retorna:
+            int: Segundos restantes de bloqueo, o 0 si no está bloqueado.
+        """
         now = time.monotonic()
         with self._lock:
             entry = self._data.get(self._key(username))
@@ -47,13 +57,28 @@ class LoginAttemptTracker:
             return int(entry.locked_until - now) + 1
 
     def is_locked(self, username: str) -> bool:
+        """
+        Indica si el usuario tiene el acceso bloqueado en este momento.
+
+        Argumentos:
+            username (str): Identificador del usuario a consultar.
+
+        Retorna:
+            bool: True si el usuario está bloqueado.
+        """
         return self.seconds_until_unlock(username) > 0
 
     # ---------- Registro ----------
+
     def register_failure(self, username: str) -> int:
         """
-        Registra un fallo y devuelve cuántos quedan antes del bloqueo.
-        Si el valor es 0 significa que acaba de bloquearse.
+        Registra un intento fallido de login.
+
+        Argumentos:
+            username (str): Identificador del usuario que falló.
+
+        Retorna:
+            int: Intentos restantes antes del bloqueo; 0 si acaba de bloquearse.
         """
         now = time.monotonic()
         with self._lock:
@@ -69,14 +94,28 @@ class LoginAttemptTracker:
             return remaining
 
     def register_success(self, username: str) -> None:
+        """
+        Limpia el historial de fallos tras un login exitoso.
+
+        Argumentos:
+            username (str): Identificador del usuario que autenticó correctamente.
+        """
         with self._lock:
             self._data.pop(self._key(username), None)
 
     # ---------- Interno ----------
+
     @staticmethod
     def _key(username: str) -> str:
         return (username or "").strip().lower()
 
     def _purge(self, entry: _Attempts, now: float) -> None:
+        """
+        Elimina del historial los timestamps que quedan fuera de la ventana de tiempo.
+
+        Argumentos:
+            entry (_Attempts): Registro de intentos del usuario.
+            now (float): Tiempo actual en segundos monótonos.
+        """
         cutoff = now - self.window_seconds
         entry.timestamps = [t for t in entry.timestamps if t >= cutoff]

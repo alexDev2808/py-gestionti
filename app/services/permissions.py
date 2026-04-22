@@ -20,6 +20,12 @@ class Role(str, Enum):
 
     @property
     def label(self) -> str:
+        """
+        Devuelve la etiqueta legible del rol para mostrar en la UI.
+
+        Retorna:
+            str: Nombre legible del rol (ej. "Administrador").
+        """
         return {
             Role.ADMIN: "Administrador",
             Role.MANAGER: "Responsable",
@@ -63,19 +69,48 @@ TIPO_PUESTO_TO_ROLE: dict[int, Role] = {
 
 @dataclass(frozen=True)
 class RoleProfile:
+    """Perfil de rol con su conjunto de permisos asociados."""
+
     role: Role
     permissions: FrozenSet[str]
 
     def has(self, permission: str) -> bool:
+        """
+        Indica si el perfil incluye el permiso indicado.
+
+        Argumentos:
+            permission (str): Clave del permiso a verificar (ej. "personal.edit").
+
+        Retorna:
+            bool: True si el permiso está en el conjunto del perfil.
+        """
         return permission in self.permissions
 
 
 def resolve_role(tipo_puesto: Optional[int]) -> Role:
+    """
+    Traduce el valor numérico de tipoPuesto al enum Role correspondiente.
+
+    Argumentos:
+        tipo_puesto (Optional[int]): Valor de la columna tipoPuesto en la BD.
+
+    Retorna:
+        Role: Rol lógico correspondiente; Role.EMPLOYEE si no se reconoce el valor.
+    """
     if tipo_puesto is None:
         return Role.EMPLOYEE
     return TIPO_PUESTO_TO_ROLE.get(int(tipo_puesto), Role.EMPLOYEE)
 
 
 def build_profile(tipo_puesto: Optional[int]) -> RoleProfile:
+    """
+    Construye el perfil completo (rol + permisos) para un tipo de puesto dado.
+
+    Argumentos:
+        tipo_puesto (Optional[int]): Valor de la columna tipoPuesto en la BD.
+
+    Retorna:
+        RoleProfile: Perfil con el rol resuelto y sus permisos asociados.
+    """
     role = resolve_role(tipo_puesto)
     return RoleProfile(role=role, permissions=ROLE_PERMISSIONS.get(role, frozenset()))
