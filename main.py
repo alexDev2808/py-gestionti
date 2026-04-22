@@ -9,8 +9,14 @@ from app.navigation.registry import SectionEntry
 from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService, AuthUser
 from app.services.connection_monitor import ConnectionMonitor
-from app.services.permissions import PERM_AREAS_VIEW, PERM_DASHBOARD_VIEW, PERM_PERSONAL_VIEW
+from app.services.permissions import (
+    PERM_AREAS_VIEW,
+    PERM_DASHBOARD_VIEW,
+    PERM_DEPARTAMENTOS_VIEW,
+    PERM_PERSONAL_VIEW,
+)
 from app.views.areas_view import AreasView
+from app.views.departamentos_view import DepartamentosView
 from app.views.dashboard_view import DashboardView
 from app.views.login_view import LoginView
 from app.views.personal_view import PersonalView
@@ -92,6 +98,12 @@ def main(page: ft.Page):
             icon=ft.Icons.BUSINESS_OUTLINED,
             selected_icon=ft.Icons.BUSINESS,
             required_permission=PERM_AREAS_VIEW,
+        )
+        registry.register(
+            DepartamentosView,
+            icon=ft.Icons.ACCOUNT_TREE_OUTLINED,
+            selected_icon=ft.Icons.ACCOUNT_TREE,
+            required_permission=PERM_DEPARTAMENTOS_VIEW,
         )
 
         visible_entries = registry.visible_for(user.permissions)
