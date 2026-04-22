@@ -14,12 +14,14 @@ from app.services.permissions import (
     PERM_DASHBOARD_VIEW,
     PERM_DEPARTAMENTOS_VIEW,
     PERM_PERSONAL_VIEW,
+    PERM_PUESTOS_VIEW,
 )
 from app.views.areas_view import AreasView
 from app.views.departamentos_view import DepartamentosView
 from app.views.dashboard_view import DashboardView
 from app.views.login_view import LoginView
 from app.views.personal_view import PersonalView
+from app.views.puestos_view import PuestosView
 
 
 def main(page: ft.Page):
@@ -104,6 +106,12 @@ def main(page: ft.Page):
             icon=ft.Icons.ACCOUNT_TREE_OUTLINED,
             selected_icon=ft.Icons.ACCOUNT_TREE,
             required_permission=PERM_DEPARTAMENTOS_VIEW,
+        )
+        registry.register(
+            PuestosView,
+            icon=ft.Icons.WORK_OUTLINE,
+            selected_icon=ft.Icons.WORK,
+            required_permission=PERM_PUESTOS_VIEW,
         )
 
         visible_entries = registry.visible_for(user.permissions)
