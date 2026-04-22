@@ -49,6 +49,10 @@ PERM_CARGOS_VIEW = "cargos.view"
 PERM_CARGOS_EDIT = "cargos.edit"
 PERM_TIPO_PUESTOS_VIEW = "tipo_puestos.view"
 PERM_TIPO_PUESTOS_EDIT = "tipo_puestos.edit"
+PERM_MATERIALES_VIEW = "materiales.view"
+PERM_MATERIALES_EDIT = "materiales.edit"
+PERM_SUBCAT_MATERIALES_VIEW = "subcat_materiales.view"
+PERM_SUBCAT_MATERIALES_EDIT = "subcat_materiales.edit"
 PERM_SETTINGS_MANAGE = "settings.manage"
 
 
@@ -69,6 +73,10 @@ ROLE_PERMISSIONS: dict[Role, FrozenSet[str]] = {
         PERM_CARGOS_EDIT,
         PERM_TIPO_PUESTOS_VIEW,
         PERM_TIPO_PUESTOS_EDIT,
+        PERM_MATERIALES_VIEW,
+        PERM_MATERIALES_EDIT,
+        PERM_SUBCAT_MATERIALES_VIEW,
+        PERM_SUBCAT_MATERIALES_EDIT,
         PERM_SETTINGS_MANAGE,
     }),
     Role.MANAGER: frozenset({
@@ -81,6 +89,8 @@ ROLE_PERMISSIONS: dict[Role, FrozenSet[str]] = {
         PERM_RESPONSABLES_VIEW,
         PERM_CARGOS_VIEW,
         PERM_TIPO_PUESTOS_VIEW,
+        PERM_MATERIALES_VIEW,
+        PERM_SUBCAT_MATERIALES_VIEW,
     }),
     Role.EMPLOYEE: frozenset({
         PERM_DASHBOARD_VIEW,
