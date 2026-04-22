@@ -11,7 +11,9 @@ from app.services.auth_service import AuthService, AuthUser
 from app.services.connection_monitor import ConnectionMonitor
 from app.services.permissions import (
     PERM_AREAS_VIEW,
+    PERM_CARGOS_VIEW,
     PERM_DASHBOARD_VIEW,
+    PERM_TIPO_PUESTOS_VIEW,
     PERM_DEPARTAMENTOS_VIEW,
     PERM_PERSONAL_VIEW,
     PERM_PUESTOS_VIEW,
@@ -23,7 +25,9 @@ from app.views.dashboard_view import DashboardView
 from app.views.login_view import LoginView
 from app.views.personal_view import PersonalView
 from app.views.puestos_view import PuestosView
+from app.views.cargos_view import CargosView
 from app.views.responsable_departamentos_view import ResponsableDepartamentosView
+from app.views.tipo_puestos_view import TipoPuestosView
 
 
 def main(page: ft.Page):
@@ -120,6 +124,18 @@ def main(page: ft.Page):
             icon=ft.Icons.MANAGE_ACCOUNTS_OUTLINED,
             selected_icon=ft.Icons.MANAGE_ACCOUNTS,
             required_permission=PERM_RESPONSABLES_VIEW,
+        )
+        registry.register(
+            CargosView,
+            icon=ft.Icons.BADGE_OUTLINED,
+            selected_icon=ft.Icons.BADGE,
+            required_permission=PERM_CARGOS_VIEW,
+        )
+        registry.register(
+            TipoPuestosView,
+            icon=ft.Icons.WORK_HISTORY_OUTLINED,
+            selected_icon=ft.Icons.WORK_HISTORY,
+            required_permission=PERM_TIPO_PUESTOS_VIEW,
         )
 
         visible_entries = registry.visible_for(user.permissions)
