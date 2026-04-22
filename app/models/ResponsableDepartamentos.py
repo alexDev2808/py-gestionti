@@ -5,7 +5,7 @@ from dataclasses import dataclass
 @dataclass
 class ResponsableDepartamentos:
     """Representa al responsable asignado a un departamento."""
-    id_responsable: int
+    id_res_dep: int
     departamento: str
     nombre_responsable: str
     id_empleado: str

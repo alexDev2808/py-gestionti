@@ -43,6 +43,8 @@ PERM_DEPARTAMENTOS_VIEW = "departamentos.view"
 PERM_DEPARTAMENTOS_EDIT = "departamentos.edit"
 PERM_PUESTOS_VIEW = "puestos.view"
 PERM_PUESTOS_EDIT = "puestos.edit"
+PERM_RESPONSABLES_VIEW = "responsables.view"
+PERM_RESPONSABLES_EDIT = "responsables.edit"
 PERM_SETTINGS_MANAGE = "settings.manage"
 
 
@@ -57,6 +59,8 @@ ROLE_PERMISSIONS: dict[Role, FrozenSet[str]] = {
         PERM_DEPARTAMENTOS_EDIT,
         PERM_PUESTOS_VIEW,
         PERM_PUESTOS_EDIT,
+        PERM_RESPONSABLES_VIEW,
+        PERM_RESPONSABLES_EDIT,
         PERM_SETTINGS_MANAGE,
     }),
     Role.MANAGER: frozenset({
@@ -66,6 +70,7 @@ ROLE_PERMISSIONS: dict[Role, FrozenSet[str]] = {
         PERM_AREAS_VIEW,
         PERM_DEPARTAMENTOS_VIEW,
         PERM_PUESTOS_VIEW,
+        PERM_RESPONSABLES_VIEW,
     }),
     Role.EMPLOYEE: frozenset({
         PERM_DASHBOARD_VIEW,
