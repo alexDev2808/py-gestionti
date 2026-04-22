@@ -315,16 +315,16 @@ class ResponsableDepartamentosView(View):
 
         dlg = ft.AlertDialog(
             modal=True,
-            title=ft.Text("Eliminar responsable"),
+            title=ft.Text("Desactivar responsable"),
             content=ft.Text(
-                f"¿Seguro que deseas eliminar a '{responsable.nombre_responsable}' "
+                f"¿Seguro que deseas desactivar a '{responsable.nombre_responsable}' "
                 f"como responsable de '{responsable.departamento}'?\n"
-                "Esta acción no se puede deshacer."
+                "El registro se conservará pero dejará de aparecer en el listado."
             ),
             actions=[
                 ft.TextButton("Cancelar", on_click=lambda _: close_dialog()),
                 ft.FilledButton(
-                    "Eliminar",
+                    "Desactivar",
                     on_click=confirm,
                     style=ft.ButtonStyle(bgcolor=ft.Colors.ERROR),
                 ),

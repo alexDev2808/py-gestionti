@@ -187,9 +187,9 @@ class ResponsableDepartamentosService:
 
         deleted = self.repository.delete(id_res_dep)
         if not deleted:
-            return False, "No se pudo eliminar el responsable.", None
+            return False, "No se pudo desactivar el responsable.", None
 
-        return True, "Responsable eliminado correctamente.", None
+        return True, "Responsable desactivado correctamente.", None
 
     def get_opciones_modal(
         self,

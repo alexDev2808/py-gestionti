@@ -29,7 +29,7 @@ class ResponsableDepartamentosRepository:
 
     def get_all(self) -> List[ResponsableDepartamentos]:
         """
-        Devuelve todos los responsables ordenados por nombre de departamento.
+        Devuelve todos los responsables activos ordenados por nombre de departamento.
 
         Retorna:
             List[ResponsableDepartamentos]: Lista de responsables.
@@ -37,6 +37,7 @@ class ResponsableDepartamentosRepository:
         query = """
             SELECT id_area_res, nom, respon, code, mail
             FROM dig_area_auto
+            WHERE activo = 1
             ORDER BY nom, respon
         """
         with get_connection() as conn:
@@ -156,15 +157,15 @@ class ResponsableDepartamentosRepository:
 
     def delete(self, id_res_dep: int) -> bool:
         """
-        Elimina físicamente un responsable de departamento.
+        Desactiva un responsable de departamento (borrado lógico: activo = 0).
 
         Argumentos:
-            id_res_dep (int): Identificador del registro a eliminar.
+            id_res_dep (int): Identificador del registro a desactivar.
 
         Retorna:
-            bool: True si se eliminó al menos una fila.
+            bool: True si se actualizó al menos una fila.
         """
-        query = "DELETE FROM dig_area_auto WHERE id_area_res = ?"
+        query = "UPDATE dig_area_auto SET activo = 0 WHERE id_area_res = ? AND activo = 1"
         with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(query, (id_res_dep,))
