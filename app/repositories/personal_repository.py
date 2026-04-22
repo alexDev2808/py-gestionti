@@ -98,6 +98,8 @@ class PersonalRepository:
             nombre_departamento=getattr(row, "nombre_departamento", None),
             nombre_area=getattr(row, "nombre_area", None),
             nombre_jefe=getattr(row, "nombre_jefe", None),
+            nombre_tc=getattr(row, "nombre_tc", None),
+            nombre_tipo_puesto=getattr(row, "nombre_tipo_puesto", None),
         )
 
     def get_all(self, include_inactive: bool = False) -> List[Personal]:
@@ -129,10 +131,14 @@ class PersonalRepository:
                 P.id_area_res3,
                 D.descp AS nombre_departamento,
                 A.nombre AS nombre_area,
-                J.respon AS nombre_jefe
+                J.respon AS nombre_jefe,
+                TC.descp AS nombre_tc,
+                TP.descp AS nombre_tipo_puesto
             FROM Personal P
             LEFT JOIN dig_areat D ON D.id_areat = P.id_areat
             LEFT JOIN Areas A ON A.id_area = P.id_area
+            LEFT JOIN dig_tc TC ON TC.id_tc = P.tc
+            LEFT JOIN dig_tipoPuesto TP ON TP.id = P.tipoPuesto
             OUTER APPLY (
                 SELECT TOP 1 respon FROM dig_area_auto
                 WHERE id_area_res = P.id_area_res AND activo = 1
@@ -144,12 +150,7 @@ class PersonalRepository:
 
         with get_connection() as conn:
             cursor = conn.cursor()
-            try:
-                rows = cursor.execute(query).fetchall()
-            except Exception as e:
-                print(f"[ERROR get_all] {e}")
-                print(f"[QUERY] {query}")
-                raise
+            rows = cursor.execute(query).fetchall()
 
         return [self._row_to_personal(row) for row in rows]
 
@@ -182,10 +183,14 @@ class PersonalRepository:
                 P.id_area_res3,
                 D.descp AS nombre_departamento,
                 A.nombre AS nombre_area,
-                J.respon AS nombre_jefe
+                J.respon AS nombre_jefe,
+                TC.descp AS nombre_tc,
+                TP.descp AS nombre_tipo_puesto
             FROM Personal P
             LEFT JOIN dig_areat D ON D.id_areat = P.id_areat
             LEFT JOIN Areas A ON A.id_area = P.id_area
+            LEFT JOIN dig_tc TC ON TC.id_tc = P.tc
+            LEFT JOIN dig_tipoPuesto TP ON TP.id = P.tipoPuesto
             OUTER APPLY (
                 SELECT TOP 1 respon FROM dig_area_auto
                 WHERE id_area_res = P.id_area_res AND activo = 1

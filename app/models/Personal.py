@@ -24,3 +24,5 @@ class Personal:
     nombre_departamento: Optional[str] = None
     nombre_area: Optional[str] = None
     nombre_jefe: Optional[str] = None
+    nombre_tc: Optional[str] = None
+    nombre_tipo_puesto: Optional[str] = None

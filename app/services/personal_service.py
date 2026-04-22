@@ -61,6 +61,8 @@ class PersonalService:
             nombre_departamento=personal.nombre_departamento,
             nombre_area=personal.nombre_area,
             nombre_jefe=personal.nombre_jefe,
+            nombre_tc=personal.nombre_tc,
+            nombre_tipo_puesto=personal.nombre_tipo_puesto,
         )
 
     def _validar_dto(self, dto) -> None:
@@ -220,15 +222,26 @@ class PersonalService:
             dict con claves: departamentos, areas, puestos, jefes — cada una una lista de (id, nombre).
         """
         from app.repositories.areas_repository import AreasRepository
+        from app.repositories.cargos_repository import CargosRepository
         from app.repositories.departamentos_repository import DepartamentosRepository
         from app.repositories.puestos_repository import PuestosRepository
         from app.repositories.responsable_departamentos_repository import ResponsableDepartamentosRepository
+        from app.repositories.tipo_puestos_repository import TipoPuestosRepository
 
         departamentos = [(d.id_departamento, d.nombre) for d in DepartamentosRepository().get_all()]
         areas = [(a.id_area, a.nombre) for a in AreasRepository().get_all()]
         puestos = [(p.id_puesto, p.puesto) for p in PuestosRepository().get_all()]
         jefes = [(r.id_res_dep, r.nombre_responsable) for r in ResponsableDepartamentosRepository().get_all()]
-        return {"departamentos": departamentos, "areas": areas, "puestos": puestos, "jefes": jefes}
+        cargos = [(c.id_tc, c.descp) for c in CargosRepository().get_all()]
+        tipo_puestos = [(tp.id, tp.descp) for tp in TipoPuestosRepository().get_all()]
+        return {
+            "departamentos": departamentos,
+            "areas": areas,
+            "puestos": puestos,
+            "jefes": jefes,
+            "cargos": cargos,
+            "tipo_puestos": tipo_puestos,
+        }
 
     def reactivar_personal(self, num_empleado: str):
         """
