@@ -17,3 +17,11 @@ __pycache__/
 
 
 .claude/
+
+# Flet build output
+build/
+
+# Flutter cache
+.flutter-plugins
+.flutter-plugins-dependencies
+.dart_tool/

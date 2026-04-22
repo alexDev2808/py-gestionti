@@ -8,6 +8,7 @@ from app.navigation import AppRouter, SectionRegistry
 from app.navigation.registry import SectionEntry
 from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService, AuthUser
+from app.services.connection_monitor import ConnectionMonitor
 from app.services.permissions import PERM_DASHBOARD_VIEW, PERM_PERSONAL_VIEW
 from app.views.dashboard_view import DashboardView
 from app.views.login_view import LoginView
@@ -16,6 +17,42 @@ from app.views.personal_view import PersonalView
 
 def main(page: ft.Page):
     configure_page(page)
+
+    # --- Monitor de conexión a la BD ---
+    _db_alert: ft.AlertDialog | None = None
+
+    def _on_connection_lost() -> None:
+        nonlocal _db_alert
+        _db_alert = ft.AlertDialog(
+            modal=True,
+            title=ft.Row(
+                [
+                    ft.Icon(ft.Icons.WIFI_OFF, color=ft.Colors.ERROR),
+                    ft.Text("Sin conexión a la base de datos"),
+                ]
+            ),
+            content=ft.Text(
+                "Se perdió la conexión con el servidor SQL Server.\n"
+                "Verificando reconexión automáticamente…"
+            ),
+        )
+        if _db_alert not in page.overlay:
+            page.overlay.append(_db_alert)
+        _db_alert.open = True
+        page.update()
+
+    def _on_connection_restored() -> None:
+        nonlocal _db_alert
+        if _db_alert is not None:
+            _db_alert.open = False
+            page.update()
+            _db_alert = None
+
+    _monitor = ConnectionMonitor(
+        on_lost=_on_connection_lost,
+        on_restored=_on_connection_restored,
+    )
+    _monitor.start()
 
     audit = AuditService()
     auth = AuthService(page, audit=audit)
