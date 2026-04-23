@@ -1,7 +1,7 @@
 """Menú lateral de navegación principal con perfil de usuario y opción de logout."""
 
-from dataclasses import dataclass
-from typing import Callable, Optional
+from dataclasses import dataclass, field
+from typing import Callable, Optional, Union
 
 import flet as ft
 
@@ -13,6 +13,14 @@ class MenuItem:
     label: str
     icon: str
     selected_icon: Optional[str] = None
+
+
+@dataclass
+class MenuGroup:
+    """Representa un grupo colapsable de ítems de navegación."""
+    label: str
+    icon: str
+    items: list[MenuItem] = field(default_factory=list)
 
 
 class SideMenu(ft.Container):
@@ -27,7 +35,7 @@ class SideMenu(ft.Container):
 
     def __init__(
         self,
-        items: list[MenuItem],
+        items: list[Union[MenuItem, MenuGroup]],
         selected_key: Optional[str] = None,
         on_select: Optional[Callable[[str], None]] = None,
         on_profile: Optional[Callable[[], None]] = None,
@@ -40,7 +48,7 @@ class SideMenu(ft.Container):
         Inicializa el menú lateral con los ítems de navegación y datos del usuario.
 
         Argumentos:
-            items (list[MenuItem]): Lista de ítems de navegación a mostrar.
+            items (list[Union[MenuItem, MenuGroup]]): Lista de ítems o grupos de navegación.
             selected_key (Optional[str]): Clave del ítem seleccionado inicialmente.
             on_select (Optional[Callable[[str], None]]): Callback invocado al seleccionar un ítem.
             on_profile (Optional[Callable[[], None]]): Callback invocado al pulsar "Perfil".
@@ -51,15 +59,22 @@ class SideMenu(ft.Container):
         """
         super().__init__()
         self._items = items
-        self._selected_key = selected_key or (items[0].key if items else None)
+        self._selected_key = selected_key or (items[0].key if items and isinstance(items[0], MenuItem) else None)
         self._on_select = on_select
         self._on_profile = on_profile
         self._on_logout = on_logout
         self._app_name = app_name
         self._user_name = user_name
         self._user_role = user_role
+        self._expanded_groups: set[str] = set()
 
-        self._nav_column = ft.Column(spacing=4, tight=True)
+        # Auto-expande el grupo que contiene el ítem seleccionado inicialmente
+        if self._selected_key:
+            for item in self._items:
+                if isinstance(item, MenuGroup) and any(i.key == self._selected_key for i in item.items):
+                    self._expanded_groups.add(item.label)
+
+        self._nav_column = ft.Column(spacing=4, tight=True, scroll=ft.ScrollMode.AUTO)
         self.expand = True
         self.content = self._build()
         self._refresh_items()
@@ -75,6 +90,10 @@ class SideMenu(ft.Container):
         if key == self._selected_key:
             return
         self._selected_key = key
+        # Auto-expande el grupo que contiene la clave seleccionada
+        for item in self._items:
+            if isinstance(item, MenuGroup) and any(i.key == key for i in item.items):
+                self._expanded_groups.add(item.label)
         self._refresh_items()
         if self.page:
             self.update()
@@ -230,14 +249,88 @@ class SideMenu(ft.Container):
             ),
         )
 
+    # ---------- Grupos colapsables ----------
+    def _toggle_group(self, label: str) -> None:
+        if label in self._expanded_groups:
+            self._expanded_groups.discard(label)
+        else:
+            self._expanded_groups.add(label)
+        self._refresh_items()
+        if self.page:
+            self.update()
+
+    def _build_group(self, group: MenuGroup) -> ft.Control:
+        is_expanded = group.label in self._expanded_groups
+        has_selected = any(i.key == self._selected_key for i in group.items)
+        fg = ft.Colors.ON_PRIMARY_CONTAINER if has_selected else ft.Colors.ON_SURFACE_VARIANT
+        weight = ft.FontWeight.W_600 if has_selected else ft.FontWeight.W_500
+        arrow = ft.Icons.EXPAND_MORE if is_expanded else ft.Icons.CHEVRON_RIGHT
+
+        header = ft.Container(
+            border_radius=10,
+            ink=True,
+            on_click=lambda _, lbl=group.label: self._toggle_group(lbl),
+            padding=ft.padding.symmetric(horizontal=12, vertical=10),
+            content=ft.Row(
+                spacing=12,
+                controls=[
+                    ft.Icon(group.icon, size=20, color=fg),
+                    ft.Text(group.label, size=14, color=fg, weight=weight, expand=True),
+                    ft.Icon(arrow, size=16, color=fg),
+                ],
+            ),
+        )
+
+        if not is_expanded:
+            return header
+
+        children = ft.Container(
+            padding=ft.padding.only(left=8),
+            content=ft.Column(
+                spacing=2,
+                controls=[self._build_child_nav_item(child) for child in group.items],
+            ),
+        )
+        return ft.Column(spacing=2, controls=[header, children])
+
+    def _build_child_nav_item(self, item: MenuItem) -> ft.Control:
+        is_selected = item.key == self._selected_key
+        bg = ft.Colors.PRIMARY_CONTAINER if is_selected else ft.Colors.TRANSPARENT
+        fg = ft.Colors.ON_PRIMARY_CONTAINER if is_selected else ft.Colors.ON_SURFACE_VARIANT
+        icon_name = item.selected_icon if (is_selected and item.selected_icon) else item.icon
+
+        return ft.Container(
+            border_radius=8,
+            bgcolor=bg,
+            ink=True,
+            on_click=lambda _, k=item.key: self._handle_select(k),
+            padding=ft.padding.symmetric(horizontal=10, vertical=8),
+            content=ft.Row(
+                spacing=10,
+                controls=[
+                    ft.Icon(icon_name, size=18, color=fg),
+                    ft.Text(
+                        item.label,
+                        size=13,
+                        color=fg,
+                        weight=ft.FontWeight.W_600 if is_selected else ft.FontWeight.W_500,
+                    ),
+                ],
+            ),
+        )
+
     # ---------- Items de navegación ----------
     def _refresh_items(self) -> None:
         """
         Regenera los controles de navegación reflejando el ítem actualmente seleccionado.
         """
-        self._nav_column.controls = [
-            self._build_nav_item(item) for item in self._items
-        ]
+        controls = []
+        for item in self._items:
+            if isinstance(item, MenuGroup):
+                controls.append(self._build_group(item))
+            else:
+                controls.append(self._build_nav_item(item))
+        self._nav_column.controls = controls
 
     def _build_nav_item(self, item: MenuItem) -> ft.Control:
         """

@@ -3,7 +3,7 @@ import flet as ft
 from app.config.theme import configure_page
 from app.components.main_layout import MainLayout
 from app.components.theme_toggle import ThemeToggleButton
-from app.components.side_menu import SideMenu, MenuItem
+from app.components.side_menu import SideMenu, MenuItem, MenuGroup
 from app.navigation import AppRouter, SectionRegistry
 from app.navigation.registry import SectionEntry
 from app.services.audit_service import AuditService
@@ -20,6 +20,8 @@ from app.services.permissions import (
     PERM_PUESTOS_VIEW,
     PERM_RESPONSABLES_VIEW,
     PERM_SUBCAT_MATERIALES_VIEW,
+    PERM_ROLES_PROVEEDORES_VIEW,
+    PERM_PROVEEDORES_VIEW,
 )
 from app.views.areas_view import AreasView
 from app.views.departamentos_view import DepartamentosView
@@ -32,6 +34,8 @@ from app.views.responsable_departamentos_view import ResponsableDepartamentosVie
 from app.views.materiales_view import MaterialesView
 from app.views.subcat_materiales_view import SubcatMaterialesView
 from app.views.tipo_puestos_view import TipoPuestosView
+from app.views.roles_proveedores_view import RolesProveedoresView
+from app.views.proveedores_view import ProveedoresView
 
 
 def main(page: ft.Page):
@@ -153,6 +157,18 @@ def main(page: ft.Page):
             selected_icon=ft.Icons.CATEGORY,
             required_permission=PERM_SUBCAT_MATERIALES_VIEW,
         )
+        registry.register(
+            RolesProveedoresView,
+            icon=ft.Icons.VERIFIED_USER_OUTLINED,
+            selected_icon=ft.Icons.VERIFIED_USER,
+            required_permission=PERM_ROLES_PROVEEDORES_VIEW,
+        )
+        registry.register(
+            ProveedoresView,
+            icon=ft.Icons.STORE_OUTLINED,
+            selected_icon=ft.Icons.STORE,
+            required_permission=PERM_PROVEEDORES_VIEW,
+        )
 
         visible_entries = registry.visible_for(user.permissions)
 
@@ -211,16 +227,21 @@ def main(page: ft.Page):
             page.update()
 
         # --- Menú lateral construido dinámicamente desde el registro ---
+        _group_keys = {RolesProveedoresView.key, ProveedoresView.key}
+        _regular_items = []
+        _alertas_items = []
+        for _entry in visible_entries:
+            _item = MenuItem(key=_entry.key, label=_entry.title, icon=_entry.icon, selected_icon=_entry.selected_icon)
+            if _entry.key in _group_keys:
+                _alertas_items.append(_item)
+            else:
+                _regular_items.append(_item)
+        _menu_items = list(_regular_items)
+        if _alertas_items:
+            _menu_items.append(MenuGroup(label="Alertas de calidad", icon=ft.Icons.WARNING_AMBER_OUTLINED, items=_alertas_items))
+
         side_menu = SideMenu(
-            items=[
-                MenuItem(
-                    key=entry.key,
-                    label=entry.title,
-                    icon=entry.icon,
-                    selected_icon=entry.selected_icon,
-                )
-                for entry in visible_entries
-            ],
+            items=_menu_items,
             selected_key=visible_entries[0].key if visible_entries else None,
             on_select=lambda key: router.go(key),
             on_profile=on_profile,
