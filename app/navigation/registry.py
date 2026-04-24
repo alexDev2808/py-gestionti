@@ -96,6 +96,42 @@ class SectionRegistry:
         self._entries[key] = entry
         self._order.append(key)
 
+    def register_with_factory(
+        self,
+        view_cls: type[View],
+        factory: Callable[[ft.Page], View],
+        icon: str,
+        selected_icon: Optional[str] = None,
+        required_permission: Optional[str] = None,
+    ) -> None:
+        """
+        Registra una vista usando una fábrica personalizada (útil para pasar dependencias).
+
+        Argumentos:
+            view_cls (type[View]): Clase de vista (solo para leer key/title/subtitle).
+            factory (Callable[[ft.Page], View]): Función que crea la instancia de la vista.
+            icon (str): Ícono del ítem en el menú lateral.
+            selected_icon (Optional[str]): Ícono cuando el ítem está seleccionado.
+            required_permission (Optional[str]): Permiso necesario para acceder a la sección.
+        """
+        key = view_cls.key
+        if not key:
+            raise ValueError(f"La vista {view_cls.__name__} no define 'key'.")
+        if key in self._entries:
+            raise ValueError(f"Sección duplicada: {key}")
+
+        entry = SectionEntry(
+            key=key,
+            title=view_cls.title,
+            subtitle=view_cls.subtitle,
+            icon=icon,
+            selected_icon=selected_icon,
+            factory=factory,
+            required_permission=required_permission,
+        )
+        self._entries[key] = entry
+        self._order.append(key)
+
     def get(self, key: str) -> Optional[SectionEntry]:
         """
         Busca una entrada por su clave.
