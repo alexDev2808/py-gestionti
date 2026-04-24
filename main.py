@@ -2,6 +2,7 @@ import flet as ft
 
 from app.config.database import set_connection_error_callback
 from app.config.theme import configure_page
+from app.services.updater_service import ReleaseInfo, check_for_update, download_and_install
 from app.components.main_layout import MainLayout
 from app.components.theme_toggle import ThemeToggleButton
 from app.components.side_menu import SideMenu, MenuItem, MenuGroup
@@ -40,8 +41,142 @@ from app.views.proveedores_view import ProveedoresView
 from app.views.profile_view import ProfileView
 
 
+def _start_update_check(page: ft.Page) -> None:
+    """Lanza la verificación de actualizaciones en segundo plano."""
+
+    def _check() -> None:
+        release = check_for_update()
+        if release:
+            page.run_task(_show_update_dialog, release)
+
+    def _fmt_bytes(n: int) -> str:
+        return f"{n / 1_048_576:.1f} MB" if n >= 1_048_576 else f"{n / 1024:.0f} KB"
+
+    async def _show_update_dialog(release: ReleaseInfo) -> None:
+        from version import __version__
+
+        # --- Dialog de descarga (se actualiza en progreso) ---
+        _progress_bar  = ft.ProgressBar(value=0, expand=True)
+        _progress_text = ft.Text("Preparando descarga…", size=12, color=ft.Colors.ON_SURFACE_VARIANT)
+        _dl_dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Row([
+                ft.Icon(ft.Icons.DOWNLOAD_OUTLINED, color=ft.Colors.PRIMARY),
+                ft.Text("Descargando actualización…"),
+            ]),
+            content=ft.Column(
+                spacing=10, tight=True, width=380,
+                controls=[
+                    _progress_bar,
+                    _progress_text,
+                    ft.Text(
+                        "La aplicación se reiniciará automáticamente al terminar.",
+                        size=12, color=ft.Colors.ON_SURFACE_VARIANT,
+                    ),
+                ],
+            ),
+        )
+
+        def _on_progress(downloaded: int, total: int) -> None:
+            if total > 0:
+                _progress_bar.value  = downloaded / total
+                _progress_text.value = f"{_fmt_bytes(downloaded)} / {_fmt_bytes(total)}"
+            else:
+                _progress_bar.value  = None  # indeterminado
+                _progress_text.value = f"Descargado: {_fmt_bytes(downloaded)}"
+            if page:
+                _progress_bar.update()
+                _progress_text.update()
+
+        def _on_error(msg: str) -> None:
+            _dl_dialog.open = False
+            err = ft.AlertDialog(
+                modal=False,
+                title=ft.Row([
+                    ft.Icon(ft.Icons.ERROR_OUTLINE, color=ft.Colors.ERROR),
+                    ft.Text("Error al actualizar"),
+                ]),
+                content=ft.Text(msg),
+                actions=[ft.TextButton("Cerrar", on_click=lambda _: _close(err))],
+                actions_alignment=ft.MainAxisAlignment.END,
+            )
+            page.overlay.append(err)
+            err.open = True
+            page.update()
+
+        def _on_ready() -> None:
+            _progress_text.value = "¡Listo! Reiniciando…"
+            _progress_bar.value  = 1
+            if page:
+                _progress_text.update()
+                _progress_bar.update()
+
+        def _close(dlg: ft.AlertDialog) -> None:
+            dlg.open = False
+            page.update()
+
+        def _start_download(_: ft.ControlEvent) -> None:
+            _info_dialog.open = False
+            if _dl_dialog not in page.overlay:
+                page.overlay.append(_dl_dialog)
+            _dl_dialog.open = True
+            page.update()
+            download_and_install(release, _on_progress, _on_error, _on_ready)
+
+        # --- Dialog de información de la actualización ---
+        notes_controls: list[ft.Control] = []
+        if release.release_notes:
+            notes_controls = [
+                ft.Divider(height=8),
+                ft.Text("Novedades:", size=12, weight=ft.FontWeight.W_600,
+                        color=ft.Colors.ON_SURFACE_VARIANT),
+                ft.Text(release.release_notes, size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+            ]
+
+        _info_dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Row([
+                ft.Icon(ft.Icons.SYSTEM_UPDATE_ALT, color=ft.Colors.PRIMARY),
+                ft.Text("Nueva versión disponible"),
+            ]),
+            content=ft.Column(
+                spacing=6, tight=True, width=380,
+                controls=[
+                    ft.Row([
+                        ft.Text("Versión actual:", size=13, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ft.Text(__version__, size=13, weight=ft.FontWeight.W_600),
+                    ]),
+                    ft.Row([
+                        ft.Text("Nueva versión:", size=13, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ft.Text(release.version, size=13, weight=ft.FontWeight.W_600,
+                                color=ft.Colors.PRIMARY),
+                    ]),
+                    *notes_controls,
+                ],
+            ),
+            actions=[
+                ft.TextButton("Ahora no", on_click=lambda _: _close(_info_dialog)),
+                ft.FilledButton(
+                    "Actualizar",
+                    icon=ft.Icons.DOWNLOAD_OUTLINED,
+                    on_click=_start_download,
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+
+        if _info_dialog not in page.overlay:
+            page.overlay.append(_info_dialog)
+        _info_dialog.open = True
+        page.update()
+
+    import threading
+    threading.Thread(target=_check, daemon=True).start()
+
+
 def main(page: ft.Page):
     configure_page(page)
+    _start_update_check(page)
 
     # --- Monitor de conexión a la BD ---
     _db_alert: ft.AlertDialog | None = None
