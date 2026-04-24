@@ -33,6 +33,10 @@ class ConnectionMonitor:
     def stop(self) -> None:
         self._running = False
 
+    @property
+    def is_connected(self) -> bool:
+        return self._connected
+
     def _loop(self) -> None:
         while self._running:
             ok, _ = test_connection()

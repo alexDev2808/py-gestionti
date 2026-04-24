@@ -1,5 +1,6 @@
 import flet as ft
 
+from app.config.database import set_connection_error_callback
 from app.config.theme import configure_page
 from app.components.main_layout import MainLayout
 from app.components.theme_toggle import ThemeToggleButton
@@ -44,39 +45,80 @@ def main(page: ft.Page):
 
     # --- Monitor de conexión a la BD ---
     _db_alert: ft.AlertDialog | None = None
+    _db_ok_alert: ft.AlertDialog | None = None
 
-    def _on_connection_lost() -> None:
+    def _show_lost_popup() -> None:
         nonlocal _db_alert
+        # No duplicar si ya está abierto
+        if _db_alert is not None and _db_alert.open:
+            return
+
+        def _dismiss(_: ft.ControlEvent) -> None:
+            _db_alert.open = False
+            page.update()
+
         _db_alert = ft.AlertDialog(
-            modal=True,
-            title=ft.Row(
-                [
-                    ft.Icon(ft.Icons.WIFI_OFF, color=ft.Colors.ERROR),
-                    ft.Text("Sin conexión a la base de datos"),
-                ]
-            ),
+            modal=False,
+            title=ft.Row([
+                ft.Icon(ft.Icons.WIFI_OFF, color=ft.Colors.ERROR),
+                ft.Text("Sin conexión a la base de datos"),
+            ]),
             content=ft.Text(
                 "Se perdió la conexión con el servidor SQL Server.\n"
                 "Verificando reconexión automáticamente…"
             ),
+            actions=[ft.TextButton("Cerrar", on_click=_dismiss)],
+            actions_alignment=ft.MainAxisAlignment.END,
         )
         if _db_alert not in page.overlay:
             page.overlay.append(_db_alert)
         _db_alert.open = True
         page.update()
 
+    def _show_restored_popup() -> None:
+        nonlocal _db_ok_alert
+
+        def _dismiss(_: ft.ControlEvent) -> None:
+            _db_ok_alert.open = False
+            page.update()
+
+        _db_ok_alert = ft.AlertDialog(
+            modal=False,
+            title=ft.Row([
+                ft.Icon(ft.Icons.WIFI, color=ft.Colors.GREEN_600),
+                ft.Text("Conexión restaurada"),
+            ]),
+            content=ft.Text("La conexión con SQL Server se ha restablecido correctamente."),
+            actions=[ft.TextButton("Cerrar", on_click=_dismiss)],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        if _db_ok_alert not in page.overlay:
+            page.overlay.append(_db_ok_alert)
+        _db_ok_alert.open = True
+        page.update()
+
+    def _on_connection_lost() -> None:
+        _show_lost_popup()
+
     def _on_connection_restored() -> None:
         nonlocal _db_alert
-        if _db_alert is not None:
+        # Cierra el popup de error si sigue abierto
+        if _db_alert is not None and _db_alert.open:
             _db_alert.open = False
             page.update()
-            _db_alert = None
+        _show_restored_popup()
+
+    def _on_db_operation_error() -> None:
+        # Solo re-muestra el popup si el monitor ya sabe que no hay conexión
+        # o si get_connection acaba de fallar (lo que implica que no hay conexión)
+        _show_lost_popup()
 
     _monitor = ConnectionMonitor(
         on_lost=_on_connection_lost,
         on_restored=_on_connection_restored,
     )
     _monitor.start()
+    set_connection_error_callback(_on_db_operation_error)
 
     audit = AuditService()
     auth = AuthService(page, audit=audit)

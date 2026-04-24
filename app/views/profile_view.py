@@ -7,7 +7,7 @@ from typing import Optional
 
 import flet as ft
 
-from app.config.database import test_connection
+from app.config.database import test_connection_with_params
 from app.config.settings import settings
 from app.models.Personal import Personal
 from app.repositories.personal_repository import PersonalRepository
@@ -452,8 +452,7 @@ class ProfileView(View):
             self._db_show_status(err, success=False)
             return
         self._db_set_loading(True)
-        self._db_apply(values)
-        ok, msg = test_connection()
+        ok, msg = test_connection_with_params(values)
         self._db_set_loading(False)
         self._db_show_status(msg, success=ok)
 
