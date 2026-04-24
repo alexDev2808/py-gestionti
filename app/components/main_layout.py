@@ -75,6 +75,7 @@ class MainLayout(ft.Container):
             switch_in_curve=ft.AnimationCurve.EASE_OUT,
             switch_out_curve=ft.AnimationCurve.EASE_IN,
             transition=ft.AnimatedSwitcherTransition.FADE,
+            expand=True,
         )
 
         self.content = self._build()

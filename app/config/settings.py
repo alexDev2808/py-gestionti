@@ -4,6 +4,9 @@ Orden de prioridad:
 1. %APPDATA%\\GestionTI\\config.json  (persistente, usado por el .exe)
 2. Variables de entorno / archivo .env  (desarrollo)
 3. Valores por defecto hardcodeados
+
+La contraseña se almacena cifrada con Windows DPAPI en el JSON.
+En memoria siempre se maneja en texto plano.
 """
 
 import json
@@ -25,12 +28,21 @@ _DB_KEYS = [
 
 
 def _load_file_config() -> dict:
-    if _CONFIG_FILE.exists():
+    if not _CONFIG_FILE.exists():
+        return {}
+    try:
+        raw = json.loads(_CONFIG_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+    # Descifrar contraseña si fue guardada con DPAPI
+    from app.services.crypto_service import decrypt
+    if "DB_PASSWORD" in raw and raw["DB_PASSWORD"]:
         try:
-            return json.loads(_CONFIG_FILE.read_text(encoding="utf-8"))
+            raw["DB_PASSWORD"] = decrypt(raw["DB_PASSWORD"])
         except Exception:
-            pass
-    return {}
+            pass  # Si falla el descifrado usamos el valor tal cual
+    return raw
 
 
 def _resolve(key: str, file_cfg: dict, default: str) -> str:
@@ -55,9 +67,22 @@ class Settings:
     DB_CONNECTION_TIMEOUT = _resolve("DB_CONNECTION_TIMEOUT", _file_cfg, "30")
 
     def save(self) -> None:
-        """Persiste la configuración en %APPDATA%\\GestionTI\\config.json."""
+        """Persiste la configuración en %APPDATA%\\GestionTI\\config.json.
+
+        La contraseña se cifra con Windows DPAPI antes de escribirla al disco.
+        """
+        from app.services.crypto_service import encrypt, is_encrypted
+
         _APPDATA_DIR.mkdir(parents=True, exist_ok=True)
         data = {k: getattr(self, k) for k in _DB_KEYS}
+
+        pwd = data.get("DB_PASSWORD", "")
+        if pwd and not is_encrypted(pwd):
+            try:
+                data["DB_PASSWORD"] = encrypt(pwd)
+            except Exception:
+                pass  # Si DPAPI no está disponible guardamos sin cifrar
+
         _CONFIG_FILE.write_text(
             json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
         )
