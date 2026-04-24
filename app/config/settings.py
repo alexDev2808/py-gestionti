@@ -25,6 +25,7 @@ _DB_KEYS = [
     "DB_DRIVER", "DB_TRUST_SERVER_CERTIFICATE", "DB_ENCRYPT",
     "DB_CONNECTION_TIMEOUT",
 ]
+_META_KEYS = ["SETUP_DONE"]
 
 
 def _load_file_config() -> dict:
@@ -65,6 +66,15 @@ class Settings:
     DB_TRUST_SERVER_CERTIFICATE = _resolve("DB_TRUST_SERVER_CERTIFICATE", _file_cfg, "yes")
     DB_ENCRYPT = _resolve("DB_ENCRYPT", _file_cfg, "yes")
     DB_CONNECTION_TIMEOUT = _resolve("DB_CONNECTION_TIMEOUT", _file_cfg, "30")
+    SETUP_DONE = _resolve("SETUP_DONE", _file_cfg, "false")
+
+    @property
+    def is_first_run(self) -> bool:
+        return self.SETUP_DONE != "true"
+
+    def mark_setup_done(self) -> None:
+        self.SETUP_DONE = "true"
+        self.save()
 
     def save(self) -> None:
         """Persiste la configuración en %APPDATA%\\GestionTI\\config.json.
@@ -74,7 +84,7 @@ class Settings:
         from app.services.crypto_service import encrypt, is_encrypted
 
         _APPDATA_DIR.mkdir(parents=True, exist_ok=True)
-        data = {k: getattr(self, k) for k in _DB_KEYS}
+        data = {k: getattr(self, k) for k in _DB_KEYS + _META_KEYS}
 
         pwd = data.get("DB_PASSWORD", "")
         if pwd and not is_encrypted(pwd):

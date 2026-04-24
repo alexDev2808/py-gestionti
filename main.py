@@ -39,6 +39,7 @@ from app.views.tipo_puestos_view import TipoPuestosView
 from app.views.roles_proveedores_view import RolesProveedoresView
 from app.views.proveedores_view import ProveedoresView
 from app.views.profile_view import ProfileView
+from app.views.setup_view import SetupView
 
 
 def _start_update_check(page: ft.Page) -> None:
@@ -259,8 +260,16 @@ def main(page: ft.Page):
     auth = AuthService(page, audit=audit)
 
     # -------------------------------------------------------------
-    # Flujo: si hay sesión -> app; si no -> login.
+    # Flujo: setup (1ra vez) -> login -> app
     # -------------------------------------------------------------
+    def mount_setup() -> None:
+        page.controls.clear()
+        page.on_route_change = None
+        page.on_view_pop = None
+        setup = SetupView(page, on_complete=mount_login)
+        page.add(setup)
+        page.update()
+
     def mount_login() -> None:
         page.controls.clear()
         # Desactivamos handlers del router previos, si los hubiera.
@@ -467,13 +476,17 @@ def main(page: ft.Page):
         router.start(default_key=registry.default_key_for(user.permissions))
 
     # -------------------------------------------------------------
-    # Arranque: intentar restaurar sesión previa.
+    # Arranque: primera ejecución -> setup; si no -> restaurar/login.
     # -------------------------------------------------------------
-    restored = auth.restore_session()
-    if restored is not None:
-        mount_app(restored)
+    from app.config.settings import settings as _settings
+    if _settings.is_first_run:
+        mount_setup()
     else:
-        mount_login()
+        restored = auth.restore_session()
+        if restored is not None:
+            mount_app(restored)
+        else:
+            mount_login()
 
 
 ft.app(target=main)
