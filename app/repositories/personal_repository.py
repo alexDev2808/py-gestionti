@@ -42,32 +42,30 @@ class PersonalRepository:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
 
+        params = (
+            personal.num_empleado,
+            personal.id_puesto,
+            personal.id_area,
+            personal.apellido_paterno,
+            personal.apellido_materno,
+            personal.nombres,
+            password_hash,
+            personal.id_area_res,
+            personal.tc,
+            personal.mail,
+            personal.id_departamento,
+            personal.id_area_res2,
+            personal.perm_fsm,
+            personal.tipo_puesto,
+            int(personal.activo),
+            personal.id_area_res3,
+        )
         with get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                query,
-                (
-                    personal.num_empleado,
-                    personal.id_puesto,
-                    personal.id_area,
-                    personal.apellido_paterno,
-                    personal.apellido_materno,
-                    personal.nombres,
-                    password_hash,
-                    personal.id_area_res,
-                    personal.tc,
-                    personal.mail,
-                    personal.id_departamento,
-                    personal.id_area_res2,
-                    personal.perm_fsm,
-                    personal.tipo_puesto,
-                    int(personal.activo),
-                    personal.id_area_res3,
-                ),
-            )
+            cursor.execute(query, params)
             conn.commit()
 
-        return personal
+            return personal
 
     def _row_to_personal(self, row) -> Personal:
         """
@@ -141,7 +139,7 @@ class PersonalRepository:
             LEFT JOIN dig_tipoPuesto TP ON TP.id = P.tipoPuesto
             OUTER APPLY (
                 SELECT TOP 1 respon FROM dig_area_auto
-                WHERE id_area_res = P.id_area_res AND activo = 1
+                WHERE id_area_res = P.id_area_res
             ) J
         """
         if not include_inactive:
@@ -193,7 +191,7 @@ class PersonalRepository:
             LEFT JOIN dig_tipoPuesto TP ON TP.id = P.tipoPuesto
             OUTER APPLY (
                 SELECT TOP 1 respon FROM dig_area_auto
-                WHERE id_area_res = P.id_area_res AND activo = 1
+                WHERE id_area_res = P.id_area_res
             ) J
             WHERE P.id_empleado = ?
         """

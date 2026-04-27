@@ -169,6 +169,17 @@ class PersonalEditModal:
         self._tipo_puesto_dd = self._dd("Tipo de puesto", self._tipo_puestos,
                                         value=None if self._is_edit else "3")
 
+        self._activo_dd = ft.Dropdown(
+            label="Estado",
+            width=400,
+            value="1" if not self._is_edit else None,
+            options=[
+                ft.dropdown.Option(key="1", text="Activo"),
+                ft.dropdown.Option(key="0", text="Inactivo"),
+            ],
+        )
+        self._activo_dd.on_select = lambda e: None
+
     def _preselect(self) -> None:
         p = self._personal
         self._depto_dd.value = str(p.id_departamento) if p.id_departamento else None
@@ -180,6 +191,7 @@ class PersonalEditModal:
         self._jefe3_dd.value = str(p.id_area_res3) if p.id_area_res3 else None
         self._perm_fsm_dd.value = str(p.perm_fsm) if p.perm_fsm is not None else "0"
         self._tipo_puesto_dd.value = str(p.tipo_puesto) if p.tipo_puesto else None
+        self._activo_dd.value = "1" if p.activo else "0"
 
     # ---------- Construcción del diálogo ----------
 
@@ -211,6 +223,8 @@ class PersonalEditModal:
                         ft.Divider(height=1),
                         self._perm_fsm_dd,
                         self._tipo_puesto_dd,
+                        ft.Divider(height=1),
+                        self._activo_dd,
                     ],
                 ),
             ),
@@ -239,4 +253,5 @@ class PersonalEditModal:
             "id_area_res3": self._jefe3_dd.value or "5",
             "perm_fsm": self._perm_fsm_dd.value or "0",
             "tipo_puesto": self._tipo_puesto_dd.value or "3",
+            "activo": self._activo_dd.value or "1",
         }

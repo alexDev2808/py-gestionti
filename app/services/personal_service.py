@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from typing import Optional
 
 from app.dto.Personal.personal_create_dto import PersonalCreateDTO
@@ -20,17 +19,11 @@ class PersonalService:
 
     def _generar_password_inicial(self, apellido_paterno: str, num_empleado: str) -> str:
         """
-        Genera el hash SHA-256 de (apellido_paterno + num_empleado) como contraseña inicial.
-
-        Argumentos:
-            apellido_paterno (str): Apellido paterno del empleado.
-            num_empleado (str): Número de empleado.
-
-        Retorna:
-            str: Hash SHA-256 en formato hexadecimal.
+        Genera la contraseña inicial como texto plano: apellido_paterno + num_empleado.
+        Se almacena legible para que otras apps (Power Apps) puedan leerla.
+        Al primer login del empleado, el sistema la migra automáticamente a hash PBKDF2.
         """
-        password_base = f"{apellido_paterno}{num_empleado}"
-        return hashlib.sha256(password_base.encode("utf-8")).hexdigest()
+        return f"{apellido_paterno}{num_empleado}"
 
     def _to_response_dto(self, personal: Personal) -> PersonalResponseDTO:
         """

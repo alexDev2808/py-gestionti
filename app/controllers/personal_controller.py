@@ -178,6 +178,8 @@ class PersonalController:
                 try:
                     if key == "id_area_res3":
                         valores[key] = int(raw) if raw.strip() else None
+                    elif key == "activo":
+                        valores[key] = raw.strip() == "1"
                     elif key.startswith("id_") or key in ("tc", "perm_fsm", "tipo_puesto"):
                         valores[key] = int(raw)
                     else:
@@ -203,7 +205,7 @@ class PersonalController:
                 perm_fsm=valores["perm_fsm"],
                 tipo_puesto=valores["tipo_puesto"],
                 id_area_res3=valores.get("id_area_res3"),
-                activo=personal.activo,
+                activo=valores.get("activo", personal.activo),
             )
             ok, message, _ = self.service.actualizar_personal(personal.num_empleado, dto)
             return ok, message

@@ -37,7 +37,6 @@ class ResponsableDepartamentosRepository:
         query = """
             SELECT id_area_res, nom, respon, code, mail
             FROM dig_area_auto
-            WHERE activo = 1
             ORDER BY nom, respon
         """
         with get_connection() as conn:
@@ -165,7 +164,7 @@ class ResponsableDepartamentosRepository:
         Retorna:
             bool: True si se actualizó al menos una fila.
         """
-        query = "UPDATE dig_area_auto SET activo = 0 WHERE id_area_res = ? AND activo = 1"
+        query = "DELETE FROM dig_area_auto WHERE id_area_res = ?"
         with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(query, (id_res_dep,))
