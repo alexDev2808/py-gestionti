@@ -24,6 +24,7 @@ from app.services.permissions import (
     PERM_SUBCAT_MATERIALES_VIEW,
     PERM_ROLES_PROVEEDORES_VIEW,
     PERM_PROVEEDORES_VIEW,
+    PERM_ROLES_MANAGE,
 )
 from app.views.areas_view import AreasView
 from app.views.departamentos_view import DepartamentosView
@@ -39,6 +40,7 @@ from app.views.tipo_puestos_view import TipoPuestosView
 from app.views.roles_proveedores_view import RolesProveedoresView
 from app.views.proveedores_view import ProveedoresView
 from app.views.profile_view import ProfileView
+from app.views.roles_view import RolesView
 from app.views.setup_view import SetupView
 
 
@@ -281,6 +283,7 @@ def main(page: ft.Page):
 
     def mount_app(user: AuthUser) -> None:
         page.controls.clear()
+        page.data = user  # accesible desde View.can()
 
         # --- Registro de secciones (carga perezosa) ---
         registry = SectionRegistry()
@@ -355,6 +358,12 @@ def main(page: ft.Page):
             icon=ft.Icons.STORE_OUTLINED,
             selected_icon=ft.Icons.STORE,
             required_permission=PERM_PROVEEDORES_VIEW,
+        )
+        registry.register(
+            RolesView,
+            icon=ft.Icons.ADMIN_PANEL_SETTINGS_OUTLINED,
+            selected_icon=ft.Icons.ADMIN_PANEL_SETTINGS,
+            required_permission=PERM_ROLES_MANAGE,
         )
         registry.register_with_factory(
             ProfileView,

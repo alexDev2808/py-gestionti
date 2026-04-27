@@ -12,6 +12,7 @@ from app.components.table_toolbar import TableToolbar
 from app.controllers.areas_controller import AreasController
 from app.dto.Areas.areas_response_dto import AreasResponseDTO
 from app.services.audit_service import AuditService
+from app.services.permissions import PERM_AREAS_EDIT
 from app.views.base import View
 
 
@@ -93,6 +94,7 @@ class AreasView(View):
                 ft.FilledTonalButton(
                     content="Nueva área",
                     icon=ft.Icons.ADD,
+                    visible=self.can(PERM_AREAS_EDIT),
                     on_click=lambda _: self._show_create_modal(),
                 ),
                 ft.IconButton(
@@ -440,6 +442,7 @@ class AreasView(View):
                     icon=ft.Icons.EDIT,
                     tooltip="Editar",
                     icon_size=18,
+                    visible=self.can(PERM_AREAS_EDIT),
                     on_click=lambda _, a=item: self._show_edit_modal(a),
                 ),
                 ft.IconButton(
@@ -447,6 +450,7 @@ class AreasView(View):
                     tooltip="Eliminar",
                     icon_size=18,
                     icon_color=ft.Colors.ERROR,
+                    visible=self.can(PERM_AREAS_EDIT),
                     on_click=lambda _, a=item: self._show_delete_confirm(a),
                 ),
             ],

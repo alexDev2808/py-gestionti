@@ -12,6 +12,7 @@ from app.components.table_toolbar import TableToolbar
 from app.controllers.subcat_materiales_controller import SubcatMaterialesController
 from app.dto.SubcatMateriales.subcat_materiales_response_dto import SubcatMaterialesResponseDTO
 from app.services.audit_service import AuditService
+from app.services.permissions import PERM_SUBCAT_MATERIALES_EDIT
 from app.views.base import View
 
 
@@ -75,6 +76,7 @@ class SubcatMaterialesView(View):
                 ft.FilledTonalButton(
                     content="Nueva subcategoría",
                     icon=ft.Icons.ADD,
+                    visible=self.can(PERM_SUBCAT_MATERIALES_EDIT),
                     on_click=lambda _: self._show_create_modal(),
                 ),
                 ft.IconButton(icon=ft.Icons.REFRESH, tooltip="Recargar", on_click=lambda _: self._load_data()),
@@ -305,8 +307,8 @@ class SubcatMaterialesView(View):
         action_buttons = ft.Row(
             spacing=4,
             controls=[
-                ft.IconButton(icon=ft.Icons.EDIT, tooltip="Editar", icon_size=18, on_click=lambda _, s=item: self._show_edit_modal(s)),
-                ft.IconButton(icon=ft.Icons.DELETE_OUTLINE, tooltip="Eliminar", icon_size=18, icon_color=ft.Colors.ERROR, on_click=lambda _, s=item: self._show_delete_confirm(s)),
+                ft.IconButton(icon=ft.Icons.EDIT, tooltip="Editar", icon_size=18, visible=self.can(PERM_SUBCAT_MATERIALES_EDIT), on_click=lambda _, s=item: self._show_edit_modal(s)),
+                ft.IconButton(icon=ft.Icons.DELETE_OUTLINE, tooltip="Eliminar", icon_size=18, icon_color=ft.Colors.ERROR, visible=self.can(PERM_SUBCAT_MATERIALES_EDIT), on_click=lambda _, s=item: self._show_delete_confirm(s)),
             ],
         )
 

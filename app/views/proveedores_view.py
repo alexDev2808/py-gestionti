@@ -13,6 +13,7 @@ from app.controllers.proveedores_controller import ProveedoresController
 from app.dto.Proveedores.proveedores_response_dto import ProveedoresResponseDTO
 from app.dto.RolesProveedores.roles_proveedores_response_dto import RolesProveedoresResponseDTO
 from app.services.audit_service import AuditService
+from app.services.permissions import PERM_PROVEEDORES_EDIT
 from app.views.base import View
 
 
@@ -80,6 +81,7 @@ class ProveedoresView(View):
                 ft.FilledTonalButton(
                     content="Nuevo proveedor",
                     icon=ft.Icons.ADD,
+                    visible=self.can(PERM_PROVEEDORES_EDIT),
                     on_click=lambda _: self._show_create_modal(),
                 ),
                 ft.IconButton(icon=ft.Icons.REFRESH, tooltip="Recargar", on_click=lambda _: self._load_data()),
@@ -321,8 +323,8 @@ class ProveedoresView(View):
         action_buttons = ft.Row(
             spacing=4,
             controls=[
-                ft.IconButton(icon=ft.Icons.EDIT, tooltip="Editar", icon_size=18, on_click=lambda _, i=item: self._show_edit_modal(i)),
-                ft.IconButton(icon=ft.Icons.DELETE_OUTLINE, tooltip="Eliminar", icon_size=18, icon_color=ft.Colors.ERROR, on_click=lambda _, i=item: self._show_delete_confirm(i)),
+                ft.IconButton(icon=ft.Icons.EDIT, tooltip="Editar", icon_size=18, visible=self.can(PERM_PROVEEDORES_EDIT), on_click=lambda _, i=item: self._show_edit_modal(i)),
+                ft.IconButton(icon=ft.Icons.DELETE_OUTLINE, tooltip="Eliminar", icon_size=18, icon_color=ft.Colors.ERROR, visible=self.can(PERM_PROVEEDORES_EDIT), on_click=lambda _, i=item: self._show_delete_confirm(i)),
             ],
         )
         cells.append(ft.Container(expand=True, padding=ft.padding.symmetric(horizontal=12, vertical=8), content=action_buttons))

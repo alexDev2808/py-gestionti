@@ -66,3 +66,11 @@ class View:
         Hook invocado cada vez que la vista se desactiva (el usuario navega fuera de ella).
         """
         pass
+
+    def can(self, permission: str) -> bool:
+        """Devuelve True si el usuario autenticado posee el permiso indicado."""
+        from app.services.auth_service import AuthUser
+        user = getattr(self.page, "data", None)
+        if not isinstance(user, AuthUser):
+            return False
+        return user.has(permission)

@@ -90,6 +90,7 @@ class PersonalRepository:
             tipo_puesto=row.tipo_puesto,
             activo=bool(row.activo),
             id_area_res3=row.id_area_res3,
+            rol_app=getattr(row, "rol_app", None),
             nombre_departamento=getattr(row, "nombre_departamento", None),
             nombre_area=getattr(row, "nombre_area", None),
             nombre_jefe=getattr(row, "nombre_jefe", None),
@@ -124,6 +125,7 @@ class PersonalRepository:
                 P.tipoPuesto AS tipo_puesto,
                 P.activo,
                 P.id_area_res3,
+                P.rol_app,
                 D.descp AS nombre_departamento,
                 A.nombre AS nombre_area,
                 J.respon AS nombre_jefe,
@@ -176,6 +178,7 @@ class PersonalRepository:
                 P.tipoPuesto AS tipo_puesto,
                 P.activo,
                 P.id_area_res3,
+                P.rol_app,
                 D.descp AS nombre_departamento,
                 A.nombre AS nombre_area,
                 J.respon AS nombre_jefe,
@@ -229,6 +232,7 @@ class PersonalRepository:
                 tipoPuesto AS tipo_puesto,
                 activo,
                 id_area_res3,
+                rol_app,
                 claves_acceso,
                 [pass] AS password_hash
             FROM Personal
@@ -375,6 +379,16 @@ class PersonalRepository:
         if affected <= 0:
             return None
         return personal
+
+    def update_rol_app(self, num_empleado: str, rol_app: Optional[str]) -> bool:
+        """Actualiza el rol de la app de gestión para el empleado indicado."""
+        query = "UPDATE Personal SET rol_app = ? WHERE id_empleado = ?"
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, (rol_app, num_empleado))
+            affected = cursor.rowcount
+            conn.commit()
+        return affected > 0
 
     def delete(self, num_empleado: str) -> bool:
         """

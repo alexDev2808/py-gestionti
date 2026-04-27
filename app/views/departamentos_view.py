@@ -12,6 +12,7 @@ from app.components.table_toolbar import TableToolbar
 from app.controllers.departamentos_controller import DepartamentosController
 from app.dto.Departamentos.departamentos_response_dto import DepartamentosResponseDTO
 from app.services.audit_service import AuditService
+from app.services.permissions import PERM_DEPARTAMENTOS_EDIT
 from app.views.base import View
 
 
@@ -93,6 +94,7 @@ class DepartamentosView(View):
                 ft.FilledTonalButton(
                     content="Nuevo departamento",
                     icon=ft.Icons.ADD,
+                    visible=self.can(PERM_DEPARTAMENTOS_EDIT),
                     on_click=lambda _: self._show_create_modal(),
                 ),
                 ft.IconButton(
@@ -444,6 +446,7 @@ class DepartamentosView(View):
                     icon=ft.Icons.EDIT,
                     tooltip="Editar",
                     icon_size=18,
+                    visible=self.can(PERM_DEPARTAMENTOS_EDIT),
                     on_click=lambda _, d=item: self._show_edit_modal(d),
                 ),
                 ft.IconButton(
@@ -451,6 +454,7 @@ class DepartamentosView(View):
                     tooltip="Eliminar",
                     icon_size=18,
                     icon_color=ft.Colors.ERROR,
+                    visible=self.can(PERM_DEPARTAMENTOS_EDIT),
                     on_click=lambda _, d=item: self._show_delete_confirm(d),
                 ),
             ],

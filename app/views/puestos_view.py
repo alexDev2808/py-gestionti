@@ -12,6 +12,7 @@ from app.components.table_toolbar import TableToolbar
 from app.controllers.puestos_controller import PuestosController
 from app.dto.Puestos.puestos_response_dto import PuestosResponseDTO
 from app.services.audit_service import AuditService
+from app.services.permissions import PERM_PUESTOS_EDIT
 from app.views.base import View
 
 
@@ -93,6 +94,7 @@ class PuestosView(View):
                 ft.FilledTonalButton(
                     content="Nuevo puesto",
                     icon=ft.Icons.ADD,
+                    visible=self.can(PERM_PUESTOS_EDIT),
                     on_click=lambda _: self._show_create_modal(),
                 ),
                 ft.IconButton(
@@ -440,6 +442,7 @@ class PuestosView(View):
                     icon=ft.Icons.EDIT,
                     tooltip="Editar",
                     icon_size=18,
+                    visible=self.can(PERM_PUESTOS_EDIT),
                     on_click=lambda _, p=item: self._show_edit_modal(p),
                 ),
                 ft.IconButton(
@@ -447,6 +450,7 @@ class PuestosView(View):
                     tooltip="Eliminar",
                     icon_size=18,
                     icon_color=ft.Colors.ERROR,
+                    visible=self.can(PERM_PUESTOS_EDIT),
                     on_click=lambda _, p=item: self._show_delete_confirm(p),
                 ),
             ],

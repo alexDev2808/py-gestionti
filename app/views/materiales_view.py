@@ -12,6 +12,7 @@ from app.components.table_toolbar import TableToolbar
 from app.controllers.materiales_controller import MaterialesController
 from app.dto.Materiales.materiales_response_dto import MaterialesResponseDTO
 from app.services.audit_service import AuditService
+from app.services.permissions import PERM_MATERIALES_EDIT
 from app.views.base import View
 
 
@@ -77,6 +78,7 @@ class MaterialesView(View):
                 ft.FilledTonalButton(
                     content="Nuevo material",
                     icon=ft.Icons.ADD,
+                    visible=self.can(PERM_MATERIALES_EDIT),
                     on_click=lambda _: self._open_modal_async(),
                 ),
                 ft.IconButton(icon=ft.Icons.REFRESH, tooltip="Recargar", on_click=lambda _: self._load_data()),
@@ -293,8 +295,8 @@ class MaterialesView(View):
         action_buttons = ft.Row(
             spacing=4,
             controls=[
-                ft.IconButton(icon=ft.Icons.EDIT, tooltip="Editar", icon_size=18, on_click=lambda _, m=item: self._open_modal_async(m)),
-                ft.IconButton(icon=ft.Icons.DELETE_OUTLINE, tooltip="Eliminar", icon_size=18, icon_color=ft.Colors.ERROR, on_click=lambda _, m=item: self._show_delete_confirm(m)),
+                ft.IconButton(icon=ft.Icons.EDIT, tooltip="Editar", icon_size=18, visible=self.can(PERM_MATERIALES_EDIT), on_click=lambda _, m=item: self._open_modal_async(m)),
+                ft.IconButton(icon=ft.Icons.DELETE_OUTLINE, tooltip="Eliminar", icon_size=18, icon_color=ft.Colors.ERROR, visible=self.can(PERM_MATERIALES_EDIT), on_click=lambda _, m=item: self._show_delete_confirm(m)),
             ],
         )
 

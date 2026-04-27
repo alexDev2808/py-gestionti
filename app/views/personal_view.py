@@ -12,6 +12,7 @@ from app.components.table_toolbar import TableToolbar
 from app.controllers.personal_controller import PersonalController
 from app.dto.Personal.personal_response_dto import PersonalResponseDTO
 from app.services.audit_service import AuditService
+from app.services.permissions import PERM_PERSONAL_EDIT
 from app.views.base import View
 
 
@@ -101,6 +102,7 @@ class PersonalView(View):
                 ft.FilledTonalButton(
                     content="Nuevo empleado",
                     icon=ft.Icons.PERSON_ADD_OUTLINED,
+                    visible=self.can(PERM_PERSONAL_EDIT),
                     on_click=lambda _: self._open_modal_async(),
                 ),
                 ft.IconButton(
@@ -441,12 +443,14 @@ class PersonalView(View):
                     icon=ft.Icons.EDIT,
                     tooltip="Editar",
                     icon_size=18,
+                    visible=self.can(PERM_PERSONAL_EDIT),
                     on_click=lambda _, p=item: self._open_modal_async(p),
                 ),
                 ft.IconButton(
                     icon=ft.Icons.POWER_SETTINGS_NEW if item.activo else ft.Icons.CHECK_CIRCLE,
                     tooltip="Desactivar" if item.activo else "Activar",
                     icon_size=18,
+                    visible=self.can(PERM_PERSONAL_EDIT),
                     on_click=lambda _, p=item: self._toggle_personal_status(p),
                 ),
             ],

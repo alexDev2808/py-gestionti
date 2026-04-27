@@ -6,6 +6,7 @@ from typing import Optional
 
 import flet as ft
 
+from app.repositories.app_permisos_repository import AppPermisosRepository
 from app.repositories.personal_repository import PersonalRepository
 from app.services.audit_service import AuditEvent, AuditService
 from app.services.login_attempt_tracker import LoginAttemptTracker
@@ -103,11 +104,13 @@ class AuthService:
         repository: Optional[PersonalRepository] = None,
         attempt_tracker: Optional[LoginAttemptTracker] = None,
         audit: Optional[AuditService] = None,
+        app_permisos_repo: Optional[AppPermisosRepository] = None,
     ) -> None:
         self.page = page
         self._repository = repository or PersonalRepository()
         self._attempts = attempt_tracker or LoginAttemptTracker()
         self._audit = audit or AuditService()
+        self._app_permisos_repo = app_permisos_repo or AppPermisosRepository()
         self._current: Optional[AuthUser] = None
 
     # ---------- API pública ----------
@@ -151,8 +154,8 @@ class AuthService:
 
         personal, stored_password = credentials  # type: ignore[misc]
 
-        # Migración transparente: si la contraseña estaba en texto plano,
-        # reemplazamos por su hash PBKDF2 sin molestar al usuario.
+        # Migración transparente: si claves_acceso estaba vacío (empleado antiguo),
+        # lo poblamos con PBKDF2 en el primer login exitoso.
         if needs_rehash(stored_password):
             try:
                 self._repository.update_password(
@@ -170,7 +173,16 @@ class AuthService:
             if part
         ).strip() or personal.num_empleado
 
-        profile = build_profile(personal.tipo_puesto)
+        # Permisos dinámicos para Gerentes
+        custom_perms = None
+        if personal.rol_app == "gerente":
+            try:
+                perms_list = self._app_permisos_repo.get_by_empleado(personal.num_empleado)
+                custom_perms = frozenset(perms_list)
+            except Exception:
+                custom_perms = frozenset()
+
+        profile = build_profile(personal.rol_app, custom_perms)
         user = AuthUser(
             username=personal.num_empleado,
             name=full_name,

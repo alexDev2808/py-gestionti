@@ -12,6 +12,7 @@ from app.components.table_toolbar import TableToolbar
 from app.controllers.cargos_controller import CargosController
 from app.dto.Cargos.cargos_response_dto import CargosResponseDTO
 from app.services.audit_service import AuditService
+from app.services.permissions import PERM_CARGOS_EDIT
 from app.views.base import View
 
 
@@ -75,6 +76,7 @@ class CargosView(View):
                 ft.FilledTonalButton(
                     content="Nuevo cargo",
                     icon=ft.Icons.ADD,
+                    visible=self.can(PERM_CARGOS_EDIT),
                     on_click=lambda _: self._show_create_modal(),
                 ),
                 ft.IconButton(icon=ft.Icons.REFRESH, tooltip="Recargar", on_click=lambda _: self._load_data()),
@@ -305,8 +307,8 @@ class CargosView(View):
         action_buttons = ft.Row(
             spacing=4,
             controls=[
-                ft.IconButton(icon=ft.Icons.EDIT, tooltip="Editar", icon_size=18, on_click=lambda _, c=item: self._show_edit_modal(c)),
-                ft.IconButton(icon=ft.Icons.DELETE_OUTLINE, tooltip="Eliminar", icon_size=18, icon_color=ft.Colors.ERROR, on_click=lambda _, c=item: self._show_delete_confirm(c)),
+                ft.IconButton(icon=ft.Icons.EDIT, tooltip="Editar", icon_size=18, visible=self.can(PERM_CARGOS_EDIT), on_click=lambda _, c=item: self._show_edit_modal(c)),
+                ft.IconButton(icon=ft.Icons.DELETE_OUTLINE, tooltip="Eliminar", icon_size=18, icon_color=ft.Colors.ERROR, visible=self.can(PERM_CARGOS_EDIT), on_click=lambda _, c=item: self._show_delete_confirm(c)),
             ],
         )
 

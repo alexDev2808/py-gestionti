@@ -18,6 +18,7 @@ from app.dto.ResponsableDepartamentos.responsable_departamentos_response_dto imp
     ResponsableDepartamentosResponseDTO,
 )
 from app.services.audit_service import AuditService
+from app.services.permissions import PERM_RESPONSABLES_EDIT
 from app.views.base import View
 
 
@@ -101,6 +102,7 @@ class ResponsableDepartamentosView(View):
                 ft.FilledTonalButton(
                     content="Nuevo responsable",
                     icon=ft.Icons.PERSON_ADD_OUTLINED,
+                    visible=self.can(PERM_RESPONSABLES_EDIT),
                     on_click=lambda _: self._open_modal_async(),
                 ),
                 ft.IconButton(
@@ -487,6 +489,7 @@ class ResponsableDepartamentosView(View):
                     icon=ft.Icons.EDIT,
                     tooltip="Editar",
                     icon_size=18,
+                    visible=self.can(PERM_RESPONSABLES_EDIT),
                     on_click=lambda _, r=item: self._open_modal_async(r),
                 ),
                 ft.IconButton(
@@ -494,6 +497,7 @@ class ResponsableDepartamentosView(View):
                     tooltip="Eliminar",
                     icon_size=18,
                     icon_color=ft.Colors.ERROR,
+                    visible=self.can(PERM_RESPONSABLES_EDIT),
                     on_click=lambda _, r=item: self._show_delete_confirm(r),
                 ),
             ],
