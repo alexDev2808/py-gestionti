@@ -9,16 +9,11 @@ from app.models.Personal import Personal
 class PersonalRepository:
     """Encapsula todas las operaciones SQL sobre la tabla Personal."""
 
-    def create(self, personal: Personal, password_hash: str) -> Personal:
+    def create(self, personal: Personal, password_plain: str, password_hashed: str) -> Personal:
         """
-        Inserta un nuevo empleado junto con su hash de contraseña.
-
-        Argumentos:
-            personal (Personal): Datos del empleado a insertar.
-            password_hash (str): Hash de la contraseña inicial del empleado.
-
-        Retorna:
-            Personal: El mismo objeto personal tras la inserción.
+        Inserta un nuevo empleado.
+        password_plain  → columna [pass]         (texto plano, legible por Power Apps).
+        password_hashed → columna claves_acceso  (PBKDF2, usada para login en Flet).
         """
         query = """
             INSERT INTO Personal (
@@ -37,9 +32,10 @@ class PersonalRepository:
                 perm_fsm,
                 tipoPuesto,
                 activo,
-                id_area_res3
+                id_area_res3,
+                claves_acceso
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
 
         params = (
@@ -49,7 +45,7 @@ class PersonalRepository:
             personal.apellido_paterno,
             personal.apellido_materno,
             personal.nombres,
-            password_hash,
+            password_plain,
             personal.id_area_res,
             personal.tc,
             personal.mail,
@@ -59,13 +55,14 @@ class PersonalRepository:
             personal.tipo_puesto,
             int(personal.activo),
             personal.id_area_res3,
+            password_hashed,
         )
         with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(query, params)
             conn.commit()
 
-            return personal
+        return personal
 
     def _row_to_personal(self, row) -> Personal:
         """
@@ -232,6 +229,7 @@ class PersonalRepository:
                 tipoPuesto AS tipo_puesto,
                 activo,
                 id_area_res3,
+                claves_acceso,
                 [pass] AS password_hash
             FROM Personal
             WHERE id_empleado = ? AND activo = 1
@@ -245,38 +243,28 @@ class PersonalRepository:
             return None
 
         personal = self._row_to_personal(row)
-        password_hash = row.password_hash or ""
-        return personal, password_hash
+        # Usa claves_acceso (hash PBKDF2) para auth; si aún está vacío (empleado
+        # creado antes de esta columna), cae al valor de [pass] como fallback.
+        stored = (row.claves_acceso or "").strip() or (row.password_hash or "").strip()
+        return personal, stored
 
-    def update_password(self, num_empleado: str, password_hash: str) -> bool:
+    def update_password(self, num_empleado: str, password_hashed: str) -> bool:
         """
-        Actualiza únicamente la contraseña (hash) de un empleado.
-
-        Argumentos:
-            num_empleado (str): Identificador del empleado.
-            password_hash (str): Nuevo hash de contraseña a almacenar.
-
-        Retorna:
-            bool: True si se actualizó al menos una fila.
+        Actualiza solo claves_acceso (hash PBKDF2 para login en Flet).
+        [pass] no se modifica; siempre permanece en texto plano.
         """
-        query = "UPDATE Personal SET [pass] = ? WHERE id_empleado = ?"
+        query = "UPDATE Personal SET claves_acceso = ? WHERE id_empleado = ?"
         with get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(query, (password_hash, num_empleado))
+            cursor.execute(query, (password_hashed, num_empleado))
             affected = cursor.rowcount
             conn.commit()
         return affected > 0
 
-    def update(self, personal: Personal, password_hash: str) -> Optional[Personal]:
+    def update(self, personal: Personal, password_hashed: str) -> Optional[Personal]:
         """
-        Actualiza todos los campos del empleado, incluyendo la contraseña.
-
-        Argumentos:
-            personal (Personal): Datos actualizados del empleado.
-            password_hash (str): Nuevo hash de contraseña.
-
-        Retorna:
-            Optional[Personal]: El empleado actualizado, o None si no se encontró.
+        Actualiza datos del empleado y su hash de acceso (claves_acceso).
+        [pass] nunca se modifica aquí; siempre permanece en texto plano.
         """
         query = """
             UPDATE Personal
@@ -286,7 +274,6 @@ class PersonalRepository:
                 app = ?,
                 apm = ?,
                 nombre = ?,
-                [pass] = ?,
                 id_area_res = ?,
                 tc = ?,
                 mail = ?,
@@ -295,7 +282,8 @@ class PersonalRepository:
                 perm_fsm = ?,
                 tipoPuesto = ?,
                 activo = ?,
-                id_area_res3 = ?
+                id_area_res3 = ?,
+                claves_acceso = ?
             WHERE id_empleado = ?
         """
 
@@ -309,7 +297,6 @@ class PersonalRepository:
                     personal.apellido_paterno,
                     personal.apellido_materno,
                     personal.nombres,
-                    password_hash,
                     personal.id_area_res,
                     personal.tc,
                     personal.mail,
@@ -319,6 +306,7 @@ class PersonalRepository:
                     personal.tipo_puesto,
                     int(personal.activo),
                     personal.id_area_res3,
+                    password_hashed,
                     personal.num_empleado,
                 ),
             )

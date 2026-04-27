@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from app.utils.password_hasher import hash_password
 from app.dto.Personal.personal_create_dto import PersonalCreateDTO
 from app.dto.Personal.personal_response_dto import PersonalResponseDTO
 from app.dto.Personal.personal_update_dto import PersonalUpdateDTO
@@ -98,7 +99,8 @@ class PersonalService:
         if existente:
             return False, "Ya existe un personal con ese número de empleado.", None
 
-        password_hash = self._generar_password_inicial(dto.apellido_paterno, dto.num_empleado)
+        password_plain = self._generar_password_inicial(dto.apellido_paterno, dto.num_empleado)
+        password_hashed = hash_password(password_plain)
 
         personal = Personal(
             num_empleado=dto.num_empleado,
@@ -118,7 +120,7 @@ class PersonalService:
             id_area_res3=dto.id_area_res3,
         )
 
-        saved = self.repository.create(personal, password_hash)
+        saved = self.repository.create(personal, password_plain, password_hashed)
         return True, "Personal creado correctamente.", self._to_response_dto(saved)
 
     def listar_personal(self, include_inactive: bool = False):
