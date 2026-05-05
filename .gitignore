@@ -18,10 +18,16 @@ __pycache__/
 
 .claude/
 
-# Flet build output
+# Flet / PyInstaller build output
 build/
+dist/
+*.spec
+*.exe
 
 # Flutter cache
 .flutter-plugins
 .flutter-plugins-dependencies
 .dart_tool/
+
+# Config persistente con credenciales cifradas (generado en tiempo de ejecución)
+config.json

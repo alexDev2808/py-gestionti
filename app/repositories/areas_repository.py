@@ -22,6 +22,10 @@ class AreasRepository:
         return Areas(
             id_area=row.id_area,
             nombre=row.nombre,
+            rfc=getattr(row, "rfc", None),
+            correo_remitente=getattr(row, "correo_remitente", None),
+            ruta_cfdi=getattr(row, "ruta_cfdi", None),
+            prefijo_carpeta=getattr(row, "prefijo_carpeta", None),
         )
 
     def get_all(self) -> List[Areas]:
@@ -32,7 +36,7 @@ class AreasRepository:
             List[Areas]: Lista de áreas.
         """
         query = """
-            SELECT id_area, nombre
+            SELECT id_area, nombre, rfc, correo_remitente, ruta_cfdi, prefijo_carpeta
             FROM Areas
             ORDER BY nombre
         """
@@ -51,7 +55,10 @@ class AreasRepository:
         Retorna:
             Optional[Areas]: El área encontrada, o None si no existe.
         """
-        query = "SELECT id_area, nombre FROM Areas WHERE id_area = ?"
+        query = """
+            SELECT id_area, nombre, rfc, correo_remitente, ruta_cfdi, prefijo_carpeta
+            FROM Areas WHERE id_area = ?
+        """
         with get_connection() as conn:
             cursor = conn.cursor()
             row = cursor.execute(query, (id_area,)).fetchone()
@@ -69,7 +76,10 @@ class AreasRepository:
         Retorna:
             Optional[Areas]: El área encontrada, o None si no existe.
         """
-        query = "SELECT id_area, nombre FROM Areas WHERE LOWER(nombre) = LOWER(?)"
+        query = """
+            SELECT id_area, nombre, rfc, correo_remitente, ruta_cfdi, prefijo_carpeta
+            FROM Areas WHERE LOWER(nombre) = LOWER(?)
+        """
         with get_connection() as conn:
             cursor = conn.cursor()
             row = cursor.execute(query, (nombre,)).fetchone()
@@ -128,6 +138,21 @@ class AreasRepository:
         with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(query, (id_area,))
+            affected = cursor.rowcount
+            conn.commit()
+        return affected > 0
+
+    def update_nomina_config(self, id_area: int, rfc: str, correo_remitente: str,
+                            ruta_cfdi: str, prefijo_carpeta: str) -> bool:
+        """Actualiza los campos de configuración de nómina de un área."""
+        query = """
+            UPDATE Areas
+            SET rfc = ?, correo_remitente = ?, ruta_cfdi = ?, prefijo_carpeta = ?
+            WHERE id_area = ?
+        """
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, (rfc, correo_remitente, ruta_cfdi, prefijo_carpeta, id_area))
             affected = cursor.rowcount
             conn.commit()
         return affected > 0

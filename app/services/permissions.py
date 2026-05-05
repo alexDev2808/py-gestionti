@@ -53,6 +53,8 @@ PERM_PROVEEDORES_VIEW       = "proveedores.view"
 PERM_PROVEEDORES_EDIT       = "proveedores.edit"
 PERM_SETTINGS_MANAGE        = "settings.manage"
 PERM_ROLES_MANAGE           = "roles.manage"
+PERM_NOMINA_SEND            = "nomina.send"
+PERM_NOMINA_HISTORIAL_VIEW  = "nomina.historial.view"
 
 
 # ---------- Etiquetas legibles para la UI de gestión de permisos ----------
@@ -115,6 +117,8 @@ ROLE_PERMISSIONS: dict[Role, FrozenSet[str]] = {
         PERM_PROVEEDORES_EDIT,
         PERM_SETTINGS_MANAGE,
         PERM_ROLES_MANAGE,
+        PERM_NOMINA_SEND,
+        PERM_NOMINA_HISTORIAL_VIEW,
     }),
     # El Manager no tiene permisos fijos; se leen de App_Permisos en BD.
     Role.MANAGER: frozenset({PERM_DASHBOARD_VIEW}),

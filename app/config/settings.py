@@ -26,6 +26,7 @@ _DB_KEYS = [
     "DB_CONNECTION_TIMEOUT",
 ]
 _META_KEYS = ["SETUP_DONE"]
+_NOMINA_KEY = "NOMINA_CREDENTIALS"
 
 
 def _load_file_config() -> dict:
@@ -36,13 +37,13 @@ def _load_file_config() -> dict:
     except Exception:
         return {}
 
-    # Descifrar contraseña si fue guardada con DPAPI
+    # Descifrar contraseña de BD si fue guardada con DPAPI
     from app.services.crypto_service import decrypt
     if "DB_PASSWORD" in raw and raw["DB_PASSWORD"]:
         try:
             raw["DB_PASSWORD"] = decrypt(raw["DB_PASSWORD"])
         except Exception:
-            pass  # Si falla el descifrado usamos el valor tal cual
+            pass
     return raw
 
 
@@ -67,6 +68,8 @@ class Settings:
     DB_ENCRYPT = _resolve("DB_ENCRYPT", _file_cfg, "yes")
     DB_CONNECTION_TIMEOUT = _resolve("DB_CONNECTION_TIMEOUT", _file_cfg, "30")
     SETUP_DONE = _resolve("SETUP_DONE", _file_cfg, "false")
+    # Credenciales Graph API por área: {"1": {"tenant_id": ..., "client_id": ..., "client_secret_enc": ...}}
+    NOMINA_CREDENTIALS: dict = _file_cfg.get(_NOMINA_KEY, {})
 
     @property
     def is_first_run(self) -> bool:
@@ -74,6 +77,38 @@ class Settings:
 
     def mark_setup_done(self) -> None:
         self.SETUP_DONE = "true"
+        self.save()
+
+    def get_nomina_credentials(self, id_area: int) -> dict:
+        """Retorna las credenciales Graph API de un área con el secreto descifrado."""
+        from app.services.crypto_service import decrypt
+        creds = dict(self.NOMINA_CREDENTIALS.get(str(id_area), {}))
+        secret_enc = creds.pop("client_secret_enc", "")
+        if secret_enc:
+            try:
+                creds["client_secret"] = decrypt(secret_enc)
+            except Exception:
+                creds["client_secret"] = secret_enc
+        else:
+            creds["client_secret"] = ""
+        return creds
+
+    def set_nomina_credentials(self, id_area: int, tenant_id: str, client_id: str, client_secret: str) -> None:
+        """Guarda las credenciales Graph API de un área cifrando el secreto con DPAPI."""
+        from app.services.crypto_service import encrypt, is_encrypted
+        if not isinstance(self.NOMINA_CREDENTIALS, dict):
+            self.NOMINA_CREDENTIALS = {}
+        existing = self.NOMINA_CREDENTIALS.get(str(id_area), {})
+        if client_secret:
+            secret_enc = encrypt(client_secret) if not is_encrypted(client_secret) else client_secret
+        else:
+            # Secreto vacío = no cambiar; conservar el cifrado existente
+            secret_enc = existing.get("client_secret_enc", "")
+        self.NOMINA_CREDENTIALS[str(id_area)] = {
+            "tenant_id": tenant_id or existing.get("tenant_id", ""),
+            "client_id": client_id or existing.get("client_id", ""),
+            "client_secret_enc": secret_enc,
+        }
         self.save()
 
     def save(self) -> None:
@@ -92,6 +127,8 @@ class Settings:
                 data["DB_PASSWORD"] = encrypt(pwd)
             except Exception:
                 pass  # Si DPAPI no está disponible guardamos sin cifrar
+
+        data[_NOMINA_KEY] = self.NOMINA_CREDENTIALS if isinstance(self.NOMINA_CREDENTIALS, dict) else {}
 
         _CONFIG_FILE.write_text(
             json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"

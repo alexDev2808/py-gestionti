@@ -1,201 +1,124 @@
 # GestionTI - Sistema de Gestión Integral
 
-Aplicación de escritorio para gestionar áreas, departamentos, personal, cargos, puestos y responsabilidades. Desarrollada con **Flet** (UI) y **SQL Server** (Base de datos).
+Aplicación de escritorio para gestionar áreas, departamentos, personal, cargos, puestos, responsabilidades y envío de recibos de nómina (CFDI). Desarrollada con **Flet** (UI) y **SQL Server** (Base de datos).
 
-## 📋 Requisitos Previos
+## Requisitos Previos
 
 - **Python 3.10 o superior**
-- **SQL Server 2019 o posterior** (con driver ODBC instalado)
-- **pip** (gestor de paquetes de Python)
+- **SQL Server 2019 o posterior** con ODBC Driver 18 instalado
+- **Windows 10/11** (el cifrado de credenciales usa Windows DPAPI)
 
-### Verificar versión de Python
+## Instalación y Ejecución
 
-```bash
-python --version
-```
-
-## 🚀 Instalación y Ejecución
-
-### 1. Clonar o descargar el proyecto
+### 1. Crear entorno virtual e instalar dependencias
 
 ```bash
-cd gestionti
-```
-
-### 2. Crear entorno virtual (recomendado)
-
-```bash
-# Windows
-python -m venv venv
-venv\Scripts\activate
-
-# macOS/Linux
-python -m venv venv
-source venv/bin/activate
-```
-
-### 3. Instalar dependencias
-
-```bash
+python -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 4. Configurar la base de datos
+### 2. Configurar la base de datos
 
-La aplicación requiere conexión a SQL Server. Existen 3 formas de configurar las credenciales (en orden de prioridad):
+Copia `.env.example` a `.env` y completa los valores:
 
-#### Opción A: Archivo de configuración persistente (RECOMENDADO para producción)
-
-1. Crear directorio de configuración:
 ```bash
-mkdir %APPDATA%\GestionTI
+copy .env.example .env
 ```
 
-2. Crear archivo `%APPDATA%\GestionTI\config.json`:
-```json
-{
-  "DB_SERVER": "localhost",
-  "DB_NAME": "GestionTI",
-  "DB_USER": "sa",
-  "DB_PASSWORD": "TuContraseña123",
-  "DB_DRIVER": "ODBC Driver 17 for SQL Server",
-  "DB_ENCRYPT": "yes",
-  "DB_TRUST_SERVER_CERTIFICATE": "yes",
-  "DB_CONNECTION_TIMEOUT": "30"
-}
-```
-
-#### Opción B: Variables de entorno o archivo `.env` (RECOMENDADO para desarrollo)
-
-Crear archivo `.env` en la raíz del proyecto:
 ```env
 DB_SERVER=localhost
-DB_NAME=GestionTI
+DB_NAME=DBTAUMEX
 DB_USER=sa
-DB_PASSWORD=TuContraseña123
-DB_DRIVER=ODBC Driver 17 for SQL Server
-DB_ENCRYPT=yes
-DB_TRUST_SERVER_CERTIFICATE=yes
-DB_CONNECTION_TIMEOUT=30
+DB_PASSWORD=tu_contraseña
+DB_DRIVER=ODBC Driver 18 for SQL Server
 ```
 
-#### Opción C: Valores por defecto
+Al ejecutar la aplicación por primera vez aparece el asistente de configuración de BD.
 
-Si no configura nada, la aplicación usa valores por defecto (localhost/GestionTI/sa).
-
-### 5. Verificar conexión a la base de datos (Opcional)
-
-```bash
-python -c "from app.config.database import test_connection; success, msg = test_connection(); print(msg)"
-```
-
-### 6. Ejecutar la aplicación
+### 3. Ejecutar
 
 ```bash
 python main.py
 ```
 
-La aplicación se abrirá en una ventana de escritorio.
-
-## 🔐 Credenciales de Acceso
-
-Al iniciar la aplicación, debe ingresar sus credenciales de usuario. Estas se validan contra la base de datos configurada.
-
-## 📁 Estructura del Proyecto
+## Estructura del Proyecto
 
 ```
 gestionti/
 ├── app/
-│   ├── assets/              # Recursos (imágenes, iconos, etc.)
 │   ├── components/          # Componentes reutilizables de la UI
 │   ├── config/              # Configuración (BD, tema, settings)
 │   ├── controllers/         # Lógica de controladores
 │   ├── dto/                 # Objetos de transferencia de datos
 │   ├── models/              # Modelos de datos
-│   ├── navigation/          # Sistema de enrutamiento
-│   ├── repositories/        # Acceso a datos
+│   ├── repositories/        # Acceso a datos (SQL Server)
 │   ├── services/            # Servicios de negocio
-│   ├── utils/               # Utilidades
 │   └── views/               # Vistas de la interfaz
-├── tests/                   # Pruebas unitarias
+├── migrations/              # Scripts SQL de migración
 ├── main.py                  # Punto de entrada
 ├── requirements.txt         # Dependencias
-└── README.md               # Este archivo
+└── .env.example             # Plantilla de variables de entorno
 ```
 
-## 🛠️ Dependencias Principales
+## Módulo de Nómina (CFDI)
 
-- **flet 0.84.0** - Framework de interfaz de usuario
-- **pyodbc 5.3.0** - Conexión a SQL Server
-- **python-dotenv 1.2.2** - Gestión de variables de entorno
-- **httpx 0.28.1** - Cliente HTTP
+Permite enviar recibos electrónicos de nómina (PDF + XML) por correo usando **Microsoft Graph API**.
 
-## ⚙️ Variables de Configuración
+### Configuración por Razón Social
 
-| Variable | Descripción | Valor por defecto |
-|----------|-------------|-------------------|
-| `DB_SERVER` | Servidor SQL Server | `localhost` |
-| `DB_NAME` | Nombre de la base de datos | `GestionTI` |
-| `DB_USER` | Usuario de SQL Server | `sa` |
-| `DB_PASSWORD` | Contraseña de SQL Server | (sin defecto) |
-| `DB_DRIVER` | Driver ODBC a usar | `ODBC Driver 17 for SQL Server` |
-| `DB_ENCRYPT` | Encriptación de conexión | `yes` |
-| `DB_TRUST_SERVER_CERTIFICATE` | Confiar en certificado auto-firmado | `yes` |
-| `DB_CONNECTION_TIMEOUT` | Timeout de conexión (segundos) | `30` |
+Cada razón social (MBancor / Logym) requiere un registro de aplicación en Azure/Entra ID con:
 
-## 🧪 Ejecutar Pruebas
+- `Mail.Send` como permiso de tipo **Application** (no Delegated)
+- Admin consent otorgado en el tenant correspondiente
 
-```bash
-python -m pytest tests/
+Los datos se configuran desde la vista **Envío de Nómina → ⚙**:
+
+| Campo | Descripción |
+|-------|-------------|
+| RFC | RFC de la empresa emisora |
+| Correo remitente | Buzón desde el que se envía (debe existir en el tenant) |
+| Ruta base CFDI | Carpeta raíz donde se almacenan los archivos, ej. `D:\nominas\MBancor` |
+| Prefijo carpeta | Prefijo de la carpeta semanal, ej. `MB` o `LG` |
+| Tenant ID | ID del tenant de Azure AD |
+| Client ID | ID de la aplicación registrada |
+| Client Secret | Secreto de la aplicación (se cifra con DPAPI al guardar) |
+
+### Flujo de envío
+
+1. Colocar el archivo ZIP con los CFDI en `[ruta_base]\[año]\`
+2. En la app: seleccionar razón social, año y semana → **Escanear**
+3. El sistema detecta el ZIP, crea la carpeta `[prefijo][semana]`, extrae los PDF/XML y mueve el ZIP a `[año]\Archivos_zip\`
+4. Se muestra la tabla de empleados con estado de correo registrado
+5. Clic en **Enviar todos** — el resultado queda registrado en el historial
+
+### Nomenclatura de archivos
+
+```
+RE_[num_razon]_Semanal_[año]_[semana]_[num_empleado]_[extra].pdf
+RE_[num_razon]_Semanal_[año]_[semana]_[num_empleado]_[extra].xml
 ```
 
-## 🔧 Troubleshooting
+### Seguridad de credenciales
 
-### Error: "pyodbc.OperationalError: ('08001', '[08001]...)"
+Las credenciales de Graph API (Client Secret) se cifran con **Windows DPAPI** antes de almacenarse en `%APPDATA%\GestionTI\config.json`. Solo el usuario de Windows que las guardó puede descifrarlas.
 
-**Problema**: No puede conectar a SQL Server.
+## Dependencias Principales
 
-**Soluciones**:
-1. Verificar que SQL Server está ejecutándose
-2. Verificar las credenciales en `.env` o `config.json`
-3. Verificar que el driver ODBC está instalado: `odbcad32.exe`
-4. Probar la conexión: `python -c "from app.config.database import test_connection; print(test_connection())"`
+| Paquete | Uso |
+|---------|-----|
+| `flet 0.84.0` | Framework de interfaz de usuario |
+| `pyodbc` | Conexión a SQL Server |
+| `msal` | Autenticación OAuth2 con Microsoft Graph API |
+| `requests` | Envío de correos vía Graph API |
+| `python-dotenv` | Variables de entorno en desarrollo |
 
-### Error: "ModuleNotFoundError: No module named 'flet'"
+## Troubleshooting
 
-**Problema**: Dependencias no instaladas.
+**`pyodbc.OperationalError: 08001`** — SQL Server no responde. Verificar que el servicio está activo y las credenciales en `.env` o `config.json`.
 
-**Solución**:
-```bash
-pip install -r requirements.txt
-```
+**`AADSTS7000216` al enviar nómina** — Client Secret vacío. Abrir ⚙ en la vista de nómina y reingresar el Client Secret.
 
-### Error: "No module named 'pyodbc'"
+**`ErrorAccessDenied` (403) al enviar nómina** — El permiso `Mail.Send` no tiene admin consent en el tenant. Ir a Entra ID → App registrations → API permissions → Grant admin consent.
 
-**Problema**: pyodbc no está instalado.
-
-**Solución**:
-```bash
-pip install pyodbc
-```
-
-### La aplicación se cierra después del login
-
-**Problema**: Posible error en la base de datos o permisos insuficientes.
-
-**Solución**: Verificar los logs de la aplicación y permisos del usuario en la base de datos.
-
-## 📝 Notas Importantes
-
-- La aplicación requiere **conexión activa** a la base de datos para funcionar
-- El sistema incluye **auditoría de acciones** que se registra en la base de datos
-- Hay un sistema de **permisos por rol** que controla el acceso a diferentes secciones
-- El **monitoreo de conexión** alerta al usuario si se pierde la conexión a la BD
-
-## 🤝 Soporte
-
-Para reportar problemas o sugerencias, contacte al equipo de desarrollo.
-
----
-
-**Última actualización**: Abril 2026
+**`ErrorInvalidUser` (404) al enviar nómina** — El correo remitente no existe o no tiene licencia en el tenant configurado.

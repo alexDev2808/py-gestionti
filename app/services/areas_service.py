@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from app.dto.Areas.areas_create_dto import AreasCreateDTO
+from app.dto.Areas.areas_nomina_config_update_dto import AreasNominaConfigUpdateDTO
 from app.dto.Areas.areas_response_dto import AreasResponseDTO
 from app.dto.Areas.areas_update_dto import AreasUpdateDTO
 from app.models.Areas import Areas
@@ -27,7 +28,14 @@ class AreasService:
         Retorna:
             AreasResponseDTO: DTO listo para exponer a la capa de presentación.
         """
-        return AreasResponseDTO(id_area=area.id_area, nombre=area.nombre)
+        return AreasResponseDTO(
+            id_area=area.id_area,
+            nombre=area.nombre,
+            rfc=area.rfc,
+            correo_remitente=area.correo_remitente,
+            ruta_cfdi=area.ruta_cfdi,
+            prefijo_carpeta=area.prefijo_carpeta,
+        )
 
     def _validar_nombre(self, nombre: str) -> None:
         """
@@ -121,6 +129,33 @@ class AreasService:
             return False, "No se pudo actualizar el área.", None
 
         return True, "Área actualizada correctamente.", self._to_response_dto(updated)
+
+    def actualizar_nomina_config(self, dto: AreasNominaConfigUpdateDTO):
+        """
+        Actualiza la configuración de nómina de un área.
+
+        Argumentos:
+            dto (AreasNominaConfigUpdateDTO): Datos de configuración de nómina.
+
+        Retorna:
+            tuple[bool, str, Optional[AreasResponseDTO]]: (éxito, mensaje, DTO actualizado o None).
+        """
+        existente = self.repository.get_by_id(dto.id_area)
+        if not existente:
+            return False, "Área no encontrada.", None
+
+        ok = self.repository.update_nomina_config(
+            id_area=dto.id_area,
+            rfc=dto.rfc or "",
+            correo_remitente=dto.correo_remitente or "",
+            ruta_cfdi=dto.ruta_cfdi or "",
+            prefijo_carpeta=dto.prefijo_carpeta or "",
+        )
+        if not ok:
+            return False, "No se pudo actualizar la configuración.", None
+
+        updated = self.repository.get_by_id(dto.id_area)
+        return True, "Configuración guardada correctamente.", self._to_response_dto(updated)
 
     def eliminar_area(self, id_area: int):
         """

@@ -25,6 +25,8 @@ from app.services.permissions import (
     PERM_ROLES_PROVEEDORES_VIEW,
     PERM_PROVEEDORES_VIEW,
     PERM_ROLES_MANAGE,
+    PERM_NOMINA_SEND,
+    PERM_NOMINA_HISTORIAL_VIEW,
 )
 from app.views.areas_view import AreasView
 from app.views.departamentos_view import DepartamentosView
@@ -40,6 +42,8 @@ from app.views.tipo_puestos_view import TipoPuestosView
 from app.views.roles_proveedores_view import RolesProveedoresView
 from app.views.proveedores_view import ProveedoresView
 from app.views.profile_view import ProfileView
+from app.views.nomina_envio_view import NominaEnvioView
+from app.views.nomina_historial_view import NominaHistorialView
 from app.views.roles_view import RolesView
 from app.views.setup_view import SetupView
 
@@ -365,6 +369,18 @@ def main(page: ft.Page):
             selected_icon=ft.Icons.ADMIN_PANEL_SETTINGS,
             required_permission=PERM_ROLES_MANAGE,
         )
+        registry.register(
+            NominaEnvioView,
+            icon=ft.Icons.SEND_OUTLINED,
+            selected_icon=ft.Icons.SEND,
+            required_permission=PERM_NOMINA_SEND,
+        )
+        registry.register(
+            NominaHistorialView,
+            icon=ft.Icons.HISTORY,
+            selected_icon=ft.Icons.HISTORY,
+            required_permission=PERM_NOMINA_HISTORIAL_VIEW,
+        )
         registry.register_with_factory(
             ProfileView,
             factory=lambda page: ProfileView(page, user),
@@ -428,20 +444,26 @@ def main(page: ft.Page):
         # --- Menú lateral construido dinámicamente desde el registro ---
         # ProfileView se accede por el botón "Perfil" del footer, no como ítem de nav.
         _group_keys = {RolesProveedoresView.key, ProveedoresView.key}
+        _nomina_keys = {NominaEnvioView.key, NominaHistorialView.key}
         _hidden_keys = {ProfileView.key}
         _regular_items = []
         _alertas_items = []
+        _nomina_items = []
         for _entry in visible_entries:
             if _entry.key in _hidden_keys:
                 continue
             _item = MenuItem(key=_entry.key, label=_entry.title, icon=_entry.icon, selected_icon=_entry.selected_icon)
             if _entry.key in _group_keys:
                 _alertas_items.append(_item)
+            elif _entry.key in _nomina_keys:
+                _nomina_items.append(_item)
             else:
                 _regular_items.append(_item)
         _menu_items = list(_regular_items)
         if _alertas_items:
             _menu_items.append(MenuGroup(label="Alertas de calidad", icon=ft.Icons.WARNING_AMBER_OUTLINED, items=_alertas_items))
+        if _nomina_items:
+            _menu_items.append(MenuGroup(label="Nómina", icon=ft.Icons.RECEIPT_LONG_OUTLINED, items=_nomina_items))
 
         side_menu = SideMenu(
             items=_menu_items,
