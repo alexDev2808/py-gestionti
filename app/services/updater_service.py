@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ctypes
-import ctypes.wintypes
 import os
 import re
 import subprocess
@@ -18,21 +17,22 @@ import httpx
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIGURACIÓN  ← completar con tu usuario y repositorio de GitHub
 # ─────────────────────────────────────────────────────────────────────────────
-GITHUB_OWNER = "alexdev2808"   # ej. "jtenorio"
-GITHUB_REPO  = "py-gestionti"    # ej. "gestionti"
+GITHUB_OWNER = "alexdev2808"
+GITHUB_REPO  = "py-gestionti"
 # ─────────────────────────────────────────────────────────────────────────────
 
 _API_URL = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
 _HEADERS  = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
-_TIMEOUT  = 10  # segundos para la llamada a la API
+_TIMEOUT  = 10
 
 
 @dataclass
 class ReleaseInfo:
-    tag: str           # ej. "v1.2.0"
-    version: str       # ej. "1.2.0"
+    tag: str
+    version: str
     download_url: str
     release_notes: str
+    is_zip: bool = False   # True → asset es .zip; False → asset es .exe
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -40,7 +40,6 @@ class ReleaseInfo:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _parse_version(v: str) -> tuple[int, ...]:
-    """Convierte 'v1.2.3' o '1.2.3' en (1, 2, 3) para comparación."""
     v = v.lstrip("v").strip()
     parts = re.split(r"[.\-]", v)
     result: list[int] = []
@@ -53,15 +52,11 @@ def _parse_version(v: str) -> tuple[int, ...]:
 
 
 def _get_current_exe() -> Optional[Path]:
-    """
-    Devuelve la ruta del .exe en ejecución usando la API de Windows.
-    Retorna None cuando se corre directamente con Python (desarrollo).
-    """
+    """Ruta del .exe en ejecución; None cuando se corre con el intérprete Python."""
     try:
         buf = ctypes.create_unicode_buffer(32768)
         ctypes.windll.kernel32.GetModuleFileNameW(None, buf, 32768)
         path = Path(buf.value)
-        # En desarrollo sys.executable apunta al intérprete de Python
         if path.suffix.lower() == ".exe" and "python" not in path.name.lower():
             return path
     except Exception:
@@ -76,8 +71,8 @@ def _get_current_exe() -> Optional[Path]:
 def check_for_update() -> Optional[ReleaseInfo]:
     """
     Consulta el último GitHub Release y lo compara con la versión local.
-    Retorna un ReleaseInfo si hay una versión más nueva, o None si ya estamos al día
-    o si ocurrió algún error de red.
+    Prefiere un asset .zip; si no hay, busca .exe.
+    Retorna ReleaseInfo si hay versión más nueva, o None si ya estamos al día.
     """
     from version import __version__
 
@@ -95,20 +90,19 @@ def check_for_update() -> Optional[ReleaseInfo]:
     if _parse_version(tag) <= _parse_version(__version__):
         return None
 
-    # Buscar el primer asset .exe del release
     assets = data.get("assets", [])
-    exe_asset = next(
-        (a for a in assets if a.get("name", "").lower().endswith(".exe")),
-        None,
-    )
-    if not exe_asset:
+    zip_asset = next((a for a in assets if a["name"].lower().endswith(".zip")), None)
+    exe_asset = next((a for a in assets if a["name"].lower().endswith(".exe")), None)
+    asset = zip_asset or exe_asset
+    if not asset:
         return None
 
     return ReleaseInfo(
         tag=tag,
         version=tag.lstrip("v"),
-        download_url=exe_asset["browser_download_url"],
+        download_url=asset["browser_download_url"],
         release_notes=(data.get("body") or "").strip(),
+        is_zip=zip_asset is not None,
     )
 
 
@@ -119,26 +113,27 @@ def download_and_install(
     on_ready: Callable[[], None],
 ) -> None:
     """
-    Descarga el nuevo .exe en un hilo secundario.
+    Descarga la actualización en un hilo secundario y lanza el reemplazo.
 
-    Callbacks:
-        on_progress(downloaded_bytes, total_bytes) — progreso de descarga
-        on_error(message)                          — si algo falla
-        on_ready()                                 — descarga completa; la app
-                                                     se cerrará sola al volver
+    - Si el asset es .zip: extrae todos los archivos sobre el directorio de la app.
+    - Si el asset es .exe: reemplaza solo el ejecutable (distribución portable).
     """
     def _run() -> None:
         current_exe = _get_current_exe()
         if current_exe is None:
             on_error(
-                "Auto-actualización disponible solo en la versión compilada (.exe).\n"
+                "Auto-actualización disponible solo en la versión compilada.\n"
                 "En desarrollo descarga el release manualmente."
             )
             return
 
-        tmp_exe = Path(tempfile.gettempdir()) / "GestionTI_update.exe"
-        bat    = Path(tempfile.gettempdir()) / "gestionti_update.bat"
+        app_dir = current_exe.parent
+        tmp_dir = Path(tempfile.gettempdir())
+        suffix  = ".zip" if release.is_zip else ".exe"
+        tmp_file = tmp_dir / f"GestionTI_update{suffix}"
+        bat      = tmp_dir / "gestionti_update.bat"
 
+        # ── Descarga ──────────────────────────────────────────────────────────
         try:
             with httpx.stream(
                 "GET", release.download_url,
@@ -148,7 +143,7 @@ def download_and_install(
                 resp.raise_for_status()
                 total      = int(resp.headers.get("content-length", 0))
                 downloaded = 0
-                with open(tmp_exe, "wb") as f:
+                with open(tmp_file, "wb") as f:
                     for chunk in resp.iter_bytes(chunk_size=65_536):
                         f.write(chunk)
                         downloaded += len(chunk)
@@ -157,22 +152,50 @@ def download_and_install(
             on_error(f"Error durante la descarga: {exc}")
             return
 
-        # Generar script de reemplazo
-        bat_content = (
-            "@echo off\n"
-            "timeout /t 3 /nobreak > nul\n"
-            f'move /y "{tmp_exe}" "{current_exe}"\n'
-            "if errorlevel 1 (\n"
-            "    echo No se pudo reemplazar el archivo. Intenta ejecutar como administrador.\n"
-            "    pause\n"
-            "    goto end\n"
-            ")\n"
-            f'start "" "{current_exe}"\n'
-            ":end\n"
-            'del "%~f0"\n'
-        )
-        bat.write_text(bat_content, encoding="utf-8")
+        # ── Script de reemplazo ───────────────────────────────────────────────
+        if release.is_zip:
+            tmp_extract = tmp_dir / "GestionTI_extracted"
+            # PowerShell extrae el zip, detecta si hay carpeta raíz y copia
+            # todo sobre el directorio de la app, luego reinicia.
+            ps_script = (
+                f"$zip = '{tmp_file}'\n"
+                f"$app = '{app_dir}'\n"
+                f"$tmp = '{tmp_extract}'\n"
+                "if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }\n"
+                "Expand-Archive -LiteralPath $zip -DestinationPath $tmp -Force\n"
+                "$items = Get-ChildItem $tmp\n"
+                "if ($items.Count -eq 1 -and $items[0].PSIsContainer) { $src = $items[0].FullName } "
+                "else { $src = $tmp }\n"
+                "Copy-Item \"$src\\*\" $app -Recurse -Force\n"
+                "Remove-Item $tmp -Recurse -Force\n"
+                "Remove-Item $zip -Force\n"
+                f"Start-Process '{current_exe}'\n"
+            )
+            ps_file = tmp_dir / "gestionti_update.ps1"
+            ps_file.write_text(ps_script, encoding="utf-8")
 
+            bat_content = (
+                "@echo off\n"
+                "timeout /t 3 /nobreak > nul\n"
+                f'powershell -ExecutionPolicy Bypass -File "{ps_file}"\n'
+                'del "%~f0"\n'
+            )
+        else:
+            bat_content = (
+                "@echo off\n"
+                "timeout /t 3 /nobreak > nul\n"
+                f'move /y "{tmp_file}" "{current_exe}"\n'
+                "if errorlevel 1 (\n"
+                "    echo No se pudo reemplazar el archivo.\n"
+                "    pause\n"
+                "    goto end\n"
+                ")\n"
+                f'start "" "{current_exe}"\n'
+                ":end\n"
+                'del "%~f0"\n'
+            )
+
+        bat.write_text(bat_content, encoding="utf-8")
         on_ready()
 
         subprocess.Popen(
