@@ -55,6 +55,7 @@ PERM_SETTINGS_MANAGE        = "settings.manage"
 PERM_ROLES_MANAGE           = "roles.manage"
 PERM_NOMINA_SEND            = "nomina.send"
 PERM_NOMINA_HISTORIAL_VIEW  = "nomina.historial.view"
+PERM_BACKUP_MANAGE          = "backup.manage"
 
 
 # ---------- Etiquetas legibles para la UI de gestión de permisos ----------
@@ -86,6 +87,15 @@ PERM_LABELS: dict[str, str] = {
 
 # Permisos asignables a un Gerente (excluye permisos de sistema)
 PERM_ASIGNABLES: list[str] = list(PERM_LABELS.keys())
+
+# Permisos exclusivos del rol Administrador — se filtran aunque existan en BD
+ADMIN_ONLY_PERMS: frozenset[str] = frozenset({
+    PERM_SETTINGS_MANAGE,
+    PERM_ROLES_MANAGE,
+    PERM_NOMINA_SEND,
+    PERM_NOMINA_HISTORIAL_VIEW,
+    PERM_BACKUP_MANAGE,
+})
 
 
 # ---------- Permisos por rol fijo ----------
@@ -119,6 +129,7 @@ ROLE_PERMISSIONS: dict[Role, FrozenSet[str]] = {
         PERM_ROLES_MANAGE,
         PERM_NOMINA_SEND,
         PERM_NOMINA_HISTORIAL_VIEW,
+        PERM_BACKUP_MANAGE,
     }),
     # El Manager no tiene permisos fijos; se leen de App_Permisos en BD.
     Role.MANAGER: frozenset({PERM_DASHBOARD_VIEW}),
@@ -175,6 +186,6 @@ def build_profile(
     """
     role = _rol_app_to_role(rol_app)
     if role == Role.MANAGER and custom_permissions is not None:
-        perms = custom_permissions | frozenset({PERM_DASHBOARD_VIEW})
+        perms = (custom_permissions - ADMIN_ONLY_PERMS) | frozenset({PERM_DASHBOARD_VIEW})
         return RoleProfile(role=role, permissions=perms)
     return RoleProfile(role=role, permissions=ROLE_PERMISSIONS.get(role, frozenset()))

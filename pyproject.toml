@@ -3,7 +3,7 @@ org         = "mx.taurus"
 product     = "GestionTI"
 company     = "Taurus"
 description = "Sistema de gestión"
-icon        = "icon.png"
+icon        = "icon.ico"
 
 [tool.flet.build]
 build_version = "1.0.0"   # debe coincidir con version.py

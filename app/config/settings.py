@@ -28,6 +28,7 @@ _DB_KEYS = [
 _META_KEYS = ["SETUP_DONE"]
 _NOMINA_KEY = "NOMINA_CREDENTIALS"
 _NOMINA_PLANTILLA_KEY = "NOMINA_PLANTILLA"
+_BACKUP_FOLDER_KEY = "BACKUP_FOLDER"
 
 _DEFAULT_PLANTILLA: dict = {
     "subject": "CFDI Nómina Semana {num_semana} - {num_empleado} {nombre_empleado}",
@@ -87,6 +88,8 @@ class Settings:
     NOMINA_CREDENTIALS: dict = _file_cfg.get(_NOMINA_KEY, {})
     # Plantilla del correo de nómina
     NOMINA_PLANTILLA: dict = _file_cfg.get(_NOMINA_PLANTILLA_KEY, {})
+    # Carpeta de destino para respaldos de BD
+    BACKUP_FOLDER: str = _file_cfg.get(_BACKUP_FOLDER_KEY, "C:\\GestionTI\\Backups")
 
     @property
     def is_first_run(self) -> bool:
@@ -120,6 +123,13 @@ class Settings:
     def set_nomina_plantilla(self, plantilla: dict) -> None:
         """Guarda la plantilla del correo de nómina."""
         self.NOMINA_PLANTILLA = plantilla
+        self.save()
+
+    def get_backup_folder(self) -> str:
+        return self.BACKUP_FOLDER or "C:\\GestionTI\\Backups"
+
+    def set_backup_folder(self, path: str) -> None:
+        self.BACKUP_FOLDER = path
         self.save()
 
     def set_nomina_credentials(self, id_area: int, tenant_id: str, client_id: str, client_secret: str) -> None:
@@ -159,6 +169,7 @@ class Settings:
 
         data[_NOMINA_KEY] = self.NOMINA_CREDENTIALS if isinstance(self.NOMINA_CREDENTIALS, dict) else {}
         data[_NOMINA_PLANTILLA_KEY] = self.NOMINA_PLANTILLA if isinstance(self.NOMINA_PLANTILLA, dict) else {}
+        data[_BACKUP_FOLDER_KEY] = self.BACKUP_FOLDER or "C:\\GestionTI\\Backups"
 
         _CONFIG_FILE.write_text(
             json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
