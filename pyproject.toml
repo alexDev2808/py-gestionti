@@ -1,9 +1,10 @@
 [tool.flet]
 org         = "mx.taurus"
 product     = "GestionTI"
+artifact    = "GestionTI"
 company     = "Taurus"
 description = "Sistema de gestión"
-icon        = "icon.ico"
+icon        = "favicon.ico"
 
 [tool.flet.build]
 build_version = "1.1.2"   # debe coincidir con version.py
