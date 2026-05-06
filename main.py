@@ -43,6 +43,7 @@ from app.views.tipo_puestos_view import TipoPuestosView
 from app.views.roles_proveedores_view import RolesProveedoresView
 from app.views.proveedores_view import ProveedoresView
 from app.views.profile_view import ProfileView
+from app.views.about_view import AboutView
 from app.views.backup_view import BackupView
 from app.views.nomina_envio_view import NominaEnvioView
 from app.views.nomina_historial_view import NominaHistorialView
@@ -388,6 +389,11 @@ def main(page: ft.Page):
             icon=ft.Icons.HISTORY,
             selected_icon=ft.Icons.HISTORY,
             required_permission=PERM_NOMINA_HISTORIAL_VIEW,
+        )
+        registry.register(
+            AboutView,
+            icon=ft.Icons.INFO_OUTLINE,
+            selected_icon=ft.Icons.INFO,
         )
         registry.register_with_factory(
             ProfileView,
