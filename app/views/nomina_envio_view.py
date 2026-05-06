@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
@@ -557,18 +558,23 @@ class NominaEnvioView(View):
         self._btn_enviar.disabled = True
         self._progress_envio.visible = True
         total = len(listos)
+        self._safe_update()
 
-        async def _send() -> None:
+        def _send() -> None:
+            from plyer import notification as _notif
             enviados = 0
             errores = 0
             ultimo_error = ""
             for idx, item in enumerate(listos):
-                label: ft.Text = self._progress_envio.controls[1]
-                label.value = f"Enviando {idx + 1}/{total} — {item.num_empleado}"
-                self._safe_update()
+                try:
+                    label: ft.Text = self._progress_envio.controls[1]
+                    label.value = f"Enviando {idx + 1}/{total} — {item.num_empleado}"
+                    self._safe_update()
+                except Exception:
+                    pass
 
                 try:
-                    ok, msg_err = await asyncio.to_thread(self._ctrl.enviar_item, area, item)
+                    ok, msg_err = self._ctrl.enviar_item(area, item)
                     if ok:
                         enviados += 1
                     else:
@@ -585,18 +591,23 @@ class NominaEnvioView(View):
             if errores == 0:
                 msg = f"Envío completado: {enviados} enviados correctamente."
                 self._set_status(msg)
-                self._show_snackbar(msg)
             else:
                 msg = f"Completado: {enviados} enviados, {errores} con error."
                 self._set_status(f"{msg}\nÚltimo error: {ultimo_error}")
-                self._show_snackbar(msg, error=True)
                 self._mostrar_error_detalle(ultimo_error)
-            self._safe_update()
 
-        try:
-            asyncio.run_coroutine_threadsafe(_send(), asyncio.get_event_loop())
-        except RuntimeError:
-            self.page.run_task(_send)
+            self._safe_update()
+            try:
+                _notif.notify(
+                    title="GestionTI — Nómina",
+                    message=msg,
+                    app_name="GestionTI",
+                    timeout=8,
+                )
+            except Exception:
+                pass
+
+        threading.Thread(target=_send, daemon=True).start()
 
     # ------------------------------------------------------------------ #
     # Utilidades                                                           #
