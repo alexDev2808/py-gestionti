@@ -27,6 +27,21 @@ _DB_KEYS = [
 ]
 _META_KEYS = ["SETUP_DONE"]
 _NOMINA_KEY = "NOMINA_CREDENTIALS"
+_NOMINA_PLANTILLA_KEY = "NOMINA_PLANTILLA"
+
+_DEFAULT_PLANTILLA: dict = {
+    "subject": "CFDI Nómina Semana {num_semana} - {num_empleado} {nombre_empleado}",
+    "lineas": [
+        {"texto": "Saludos cordiales", "bold": False, "visible": True},
+        {"texto": "Servicio de entrega de CFDI de recibos electrónicos, emitido y enviado por:", "bold": False, "visible": True},
+        {"texto": "RFC: {rfc}", "bold": False, "visible": True},
+        {"texto": "Razón Social: {razon_social}", "bold": False, "visible": True},
+        {"texto": "Datos CFDI del recibo electrónico:", "bold": True, "visible": True},
+        {"texto": "Nombre empleado: {num_empleado} - {nombre_empleado}", "bold": False, "visible": True},
+        {"texto": "Período: {num_semana} Semanal del {fecha_inicio} al {fecha_fin}", "bold": False, "visible": True},
+        {"texto": "Se adjunta el archivo del CFDI correspondiente.", "bold": False, "visible": True},
+    ],
+}
 
 
 def _load_file_config() -> dict:
@@ -70,6 +85,8 @@ class Settings:
     SETUP_DONE = _resolve("SETUP_DONE", _file_cfg, "false")
     # Credenciales Graph API por área: {"1": {"tenant_id": ..., "client_id": ..., "client_secret_enc": ...}}
     NOMINA_CREDENTIALS: dict = _file_cfg.get(_NOMINA_KEY, {})
+    # Plantilla del correo de nómina
+    NOMINA_PLANTILLA: dict = _file_cfg.get(_NOMINA_PLANTILLA_KEY, {})
 
     @property
     def is_first_run(self) -> bool:
@@ -92,6 +109,18 @@ class Settings:
         else:
             creds["client_secret"] = ""
         return creds
+
+    def get_nomina_plantilla(self) -> dict:
+        """Retorna la plantilla del correo de nómina (con defaults si no está configurada)."""
+        import copy
+        if isinstance(self.NOMINA_PLANTILLA, dict) and self.NOMINA_PLANTILLA:
+            return self.NOMINA_PLANTILLA
+        return copy.deepcopy(_DEFAULT_PLANTILLA)
+
+    def set_nomina_plantilla(self, plantilla: dict) -> None:
+        """Guarda la plantilla del correo de nómina."""
+        self.NOMINA_PLANTILLA = plantilla
+        self.save()
 
     def set_nomina_credentials(self, id_area: int, tenant_id: str, client_id: str, client_secret: str) -> None:
         """Guarda las credenciales Graph API de un área cifrando el secreto con DPAPI."""
@@ -129,6 +158,7 @@ class Settings:
                 pass  # Si DPAPI no está disponible guardamos sin cifrar
 
         data[_NOMINA_KEY] = self.NOMINA_CREDENTIALS if isinstance(self.NOMINA_CREDENTIALS, dict) else {}
+        data[_NOMINA_PLANTILLA_KEY] = self.NOMINA_PLANTILLA if isinstance(self.NOMINA_PLANTILLA, dict) else {}
 
         _CONFIG_FILE.write_text(
             json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"

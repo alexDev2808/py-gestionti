@@ -67,6 +67,12 @@ class NominaController:
     def get_credenciales(self, id_area: int) -> dict:
         return settings.get_nomina_credentials(id_area)
 
+    def get_plantilla(self) -> dict:
+        return settings.get_nomina_plantilla()
+
+    def guardar_plantilla(self, plantilla: dict) -> None:
+        settings.set_nomina_plantilla(plantilla)
+
     # ------------------------------------------------------------------ #
     # Escaneo de carpeta                                                   #
     # ------------------------------------------------------------------ #
@@ -143,10 +149,22 @@ class NominaController:
     ) -> tuple[bool, str]:
         """Envía un CFDI y registra el resultado en el historial."""
         creds = self.get_credenciales(area.id_area)
+        plantilla = settings.get_nomina_plantilla()
 
         fecha_inicio, fecha_fin = self._nomina_service.calcular_periodo(item.anio, item.num_semana)
-        subject = f"CFDI Nómina Semana {item.num_semana} - {item.num_empleado} {item.nombre_empleado}"
-        body = self._nomina_service.formatear_cuerpo(
+        subject_tpl = plantilla.get("subject", "CFDI Nómina Semana {num_semana} - {num_empleado} {nombre_empleado}")
+        try:
+            subject = subject_tpl.format(
+                num_semana=item.num_semana,
+                num_empleado=item.num_empleado,
+                nombre_empleado=item.nombre_empleado,
+                rfc=area.rfc or "",
+                razon_social=area.nombre,
+            )
+        except (KeyError, ValueError):
+            subject = subject_tpl
+
+        body, content_type = self._nomina_service.formatear_cuerpo(
             rfc=area.rfc or "",
             razon_social=area.nombre,
             num_empleado=item.num_empleado,
@@ -154,6 +172,7 @@ class NominaController:
             num_semana=item.num_semana,
             fecha_inicio=fecha_inicio,
             fecha_fin=fecha_fin,
+            plantilla=plantilla,
         )
 
         try:
@@ -167,6 +186,7 @@ class NominaController:
                 body=body,
                 pdf_path=item.pdf_path,
                 xml_path=item.xml_path,
+                content_type=content_type,
             )
             self._historial_service.registrar(
                 num_semana=item.num_semana,

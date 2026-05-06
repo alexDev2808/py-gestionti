@@ -145,19 +145,52 @@ class NominaService:
         num_semana: int,
         fecha_inicio: date,
         fecha_fin: date,
-    ) -> str:
+        plantilla: dict | None = None,
+    ) -> tuple[str, str]:
+        """Retorna (body, content_type). content_type es 'HTML' cuando hay plantilla, 'Text' si no."""
+        import html as _html
+
         fi = fecha_inicio.strftime("%d/%m/%Y")
         ff = fecha_fin.strftime("%d/%m/%Y")
-        return (
-            "Saludos cordiales\n"
-            "Servicio de entrega de CFDI de recibos electrónicos, emitido y enviado por:\n"
-            f"RFC: {rfc}\n"
-            f"Razón Social: {razon_social}\n"
-            "Datos CFDI del recibo electrónico:\n"
-            f"Nombre empleado: {num_empleado} - {nombre_empleado}\n"
-            f"Período: {num_semana} Semanal del {fi} al {ff} -\n"
-            "Se adjunta el archivo del CFDI correspondiente."
-        )
+        variables = {
+            "rfc": rfc,
+            "razon_social": razon_social,
+            "num_empleado": num_empleado,
+            "nombre_empleado": nombre_empleado,
+            "num_semana": num_semana,
+            "fecha_inicio": fi,
+            "fecha_fin": ff,
+        }
+
+        if not plantilla or not plantilla.get("lineas"):
+            body = (
+                "Saludos cordiales\n"
+                "Servicio de entrega de CFDI de recibos electrónicos, emitido y enviado por:\n"
+                f"RFC: {rfc}\n"
+                f"Razón Social: {razon_social}\n"
+                "Datos CFDI del recibo electrónico:\n"
+                f"Nombre empleado: {num_empleado} - {nombre_empleado}\n"
+                f"Período: {num_semana} Semanal del {fi} al {ff} -\n"
+                "Se adjunta el archivo del CFDI correspondiente."
+            )
+            return body, "Text"
+
+        parts: list[str] = []
+        for linea in plantilla["lineas"]:
+            if not linea.get("visible", True):
+                continue
+            texto = linea.get("texto", "")
+            try:
+                texto = texto.format(**variables)
+            except (KeyError, ValueError):
+                pass
+            escaped = _html.escape(texto)
+            if linea.get("bold", False):
+                parts.append(f"<p><strong>{escaped}</strong></p>")
+            else:
+                parts.append(f"<p>{escaped}</p>")
+
+        return "\n".join(parts), "HTML"
 
     # ------------------------------------------------------------------ #
     # Envío por Microsoft Graph API                                        #
@@ -174,6 +207,7 @@ class NominaService:
         body: str,
         pdf_path: str,
         xml_path: str,
+        content_type: str = "Text",
     ) -> None:
         """
         Envía el correo con los archivos CFDI adjuntos usando Microsoft Graph API.
@@ -213,7 +247,7 @@ class NominaService:
         payload = {
             "message": {
                 "subject": subject,
-                "body": {"contentType": "Text", "content": body},
+                "body": {"contentType": content_type, "content": body},
                 "toRecipients": [{"emailAddress": {"address": destinatario}}],
                 "attachments": attachments,
             }

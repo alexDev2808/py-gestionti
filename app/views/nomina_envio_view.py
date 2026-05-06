@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
 import flet as ft
 
 from app.components.nomina_config_modal import NominaConfigModal
+from app.components.nomina_plantilla_modal import NominaPlantillaModal
 from app.controllers.nomina_controller import NominaController
 from app.dto.Areas.areas_response_dto import AreasResponseDTO
 from app.services.nomina_service import NominaItem, NominaService
@@ -28,6 +29,7 @@ class NominaEnvioView(View):
         self._items: list[NominaItem] = []
         self._enviando = False
         self._modal: Optional[NominaConfigModal] = None
+        self._plantilla_modal: Optional[NominaPlantillaModal] = None
 
         # --- Controles superiores ---
         self._dd_area = ft.Dropdown(
@@ -37,14 +39,20 @@ class NominaEnvioView(View):
         )
         self._dd_area.on_change = self._on_area_change
 
+        _hoy = date.today()
+        _jan1 = date(_hoy.year, 1, 1)
+        _week1_start = _jan1 - timedelta(days=(_jan1.weekday() - 4) % 7)
+        _semana_actual = (_hoy - _week1_start).days // 7 + 1
+
         self._tf_anio = ft.TextField(
             label="Año",
-            value=str(datetime.now().year),
+            value=str(_hoy.year),
             width=90,
             keyboard_type=ft.KeyboardType.NUMBER,
         )
         self._tf_semana = ft.TextField(
             label="Semana",
+            value=str(_semana_actual),
             width=90,
             keyboard_type=ft.KeyboardType.NUMBER,
         )
@@ -57,6 +65,11 @@ class NominaEnvioView(View):
             icon=ft.Icons.SETTINGS_OUTLINED,
             tooltip="Configurar área",
             on_click=lambda _: self._abrir_config(),
+        )
+        self._btn_plantilla = ft.IconButton(
+            icon=ft.Icons.EMAIL_OUTLINED,
+            tooltip="Personalizar plantilla del correo",
+            on_click=lambda _: self._abrir_plantilla(),
         )
 
         # --- Controles de resultado ---
@@ -76,6 +89,16 @@ class NominaEnvioView(View):
             clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
             height=400,
         )
+
+        # Buscador
+        self._tf_buscar = ft.TextField(
+            label="Buscar empleado",
+            prefix_icon=ft.Icons.SEARCH,
+            expand=True,
+            dense=True,
+            visible=False,
+        )
+        self._tf_buscar.on_change = self._on_buscar_change
 
         # Barra de envío
         self._btn_enviar = ft.FilledButton(
@@ -126,11 +149,13 @@ class NominaEnvioView(View):
                         self._tf_semana,
                         self._btn_escanear,
                         self._btn_config,
+                        self._btn_plantilla,
                     ],
                 ),
                 self._progress,
                 self._status_text,
                 self._banner_sin_correo,
+                ft.Row(controls=[self._tf_buscar]),
                 self._table_container,
                 ft.Row(
                     spacing=16,
@@ -167,7 +192,8 @@ class NominaEnvioView(View):
                 self._areas = areas
                 self._dd_area.options = [ft.dropdown.Option(a.nombre) for a in areas]
                 if areas:
-                    self._dd_area.value = areas[0].nombre
+                    preferida = next((a for a in areas if a.nombre == "Manufacturas Bancor"), areas[0])
+                    self._dd_area.value = preferida.nombre
             except Exception as exc:
                 self._set_status(f"Error al cargar áreas: {exc}")
             finally:
@@ -186,6 +212,8 @@ class NominaEnvioView(View):
         self._table_container.visible = False
         self._btn_enviar.visible = False
         self._banner_sin_correo.visible = False
+        self._tf_buscar.value = ""
+        self._tf_buscar.visible = False
         self._set_status("")
         self._safe_update()
 
@@ -199,7 +227,8 @@ class NominaEnvioView(View):
             if nombre_actual and any(a.nombre == nombre_actual for a in areas):
                 self._dd_area.value = nombre_actual
             elif areas:
-                self._dd_area.value = areas[0].nombre
+                preferida = next((a for a in areas if a.nombre == "Manufacturas Bancor"), areas[0])
+                self._dd_area.value = preferida.nombre
         except Exception:
             pass
         self._safe_update()
@@ -263,6 +292,36 @@ class NominaEnvioView(View):
             except Exception:
                 pass
         self._modal = None
+
+    # ------------------------------------------------------------------ #
+    # Plantilla de correo                                                  #
+    # ------------------------------------------------------------------ #
+
+    def _abrir_plantilla(self) -> None:
+        plantilla = self._ctrl.get_plantilla()
+        self._plantilla_modal = NominaPlantillaModal(
+            page=self.page,
+            plantilla=plantilla,
+            on_save=self._guardar_plantilla,
+            on_cancel=self._cerrar_plantilla,
+        )
+        self.page.show_dialog(self._plantilla_modal.dialog)
+
+    def _guardar_plantilla(self, plantilla: dict) -> None:
+        self._cerrar_plantilla()
+        try:
+            self._ctrl.guardar_plantilla(plantilla)
+            self._show_snackbar("Plantilla guardada.")
+        except Exception as exc:
+            self._show_snackbar(f"Error al guardar plantilla: {exc}", error=True)
+
+    def _cerrar_plantilla(self) -> None:
+        if self._plantilla_modal:
+            try:
+                self.page.pop_dialog()
+            except Exception:
+                pass
+        self._plantilla_modal = None
 
     # ------------------------------------------------------------------ #
     # Escaneo                                                              #
@@ -407,6 +466,8 @@ class NominaEnvioView(View):
         else:
             self._banner_sin_correo.visible = False
 
+        self._tf_buscar.value = ""
+        self._tf_buscar.visible = True
         self._rows_container.controls = [self._build_row(i) for i in items]
         self._table_container.visible = True
 
@@ -417,21 +478,39 @@ class NominaEnvioView(View):
             self._btn_enviar.visible = False
 
     # ------------------------------------------------------------------ #
+    # Buscador                                                             #
+    # ------------------------------------------------------------------ #
+
+    def _on_buscar_change(self, e: ft.ControlEvent) -> None:
+        query = (self._tf_buscar.value or "").lower().strip()
+        filtrados = (
+            self._items if not query else [
+                i for i in self._items
+                if query in i.num_empleado.lower()
+                or query in i.nombre_empleado.lower()
+                or query in i.correo.lower()
+            ]
+        )
+        self._rows_container.controls = [self._build_row(i) for i in filtrados]
+        self._safe_update()
+
+    # ------------------------------------------------------------------ #
     # Construcción de tabla                                                #
     # ------------------------------------------------------------------ #
 
     _COLUMNS = ["# Empl.", "Nombre", "Correo", "PDF", "XML"]
+    _EMPL_COL_WIDTH = 80
 
     def _build_table_header(self) -> ft.Control:
-        cells = [
-            ft.Container(
-                expand=True,
+        def _hcell(text: str, width: int = None) -> ft.Container:
+            return ft.Container(
+                expand=width is None,
+                width=width,
                 padding=ft.padding.symmetric(horizontal=10, vertical=8),
-                content=ft.Text(h, size=12, weight=ft.FontWeight.W_600,
+                content=ft.Text(text, size=12, weight=ft.FontWeight.W_600,
                                 color=ft.Colors.ON_SURFACE_VARIANT),
             )
-            for h in self._COLUMNS
-        ]
+        cells = [_hcell(self._COLUMNS[0], self._EMPL_COL_WIDTH)] + [_hcell(h) for h in self._COLUMNS[1:]]
         return ft.Container(
             bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
             content=ft.Row(spacing=0, controls=cells),
@@ -439,7 +518,7 @@ class NominaEnvioView(View):
 
     def _build_row(self, item: NominaItem) -> ft.Control:
         cells = [
-            self._cell(item.num_empleado),
+            self._cell(item.num_empleado, width=self._EMPL_COL_WIDTH),
             self._cell(item.nombre_empleado),
             self._cell(
                 item.correo or "Sin correo",
@@ -453,9 +532,10 @@ class NominaEnvioView(View):
             border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
         )
 
-    def _cell(self, value: str, small: bool = False, color=None) -> ft.Container:
+    def _cell(self, value: str, small: bool = False, color=None, width: int = None) -> ft.Container:
         return ft.Container(
-            expand=True,
+            expand=width is None,
+            width=width,
             padding=ft.padding.symmetric(horizontal=10, vertical=8),
             content=ft.Text(value, size=11 if small else 12, no_wrap=True,
                             overflow=ft.TextOverflow.ELLIPSIS, color=color),

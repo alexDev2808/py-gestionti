@@ -84,6 +84,22 @@ Los datos se configuran desde la vista **Envío de Nómina → ⚙**:
 | Client ID | ID de la aplicación registrada |
 | Client Secret | Secreto de la aplicación (se cifra con DPAPI al guardar) |
 
+### Plantilla del correo
+
+El botón ✉ abre el editor de plantilla donde se puede personalizar el asunto y cada línea del cuerpo del correo. Admite las siguientes variables que se resuelven por empleado en el momento del envío:
+
+| Variable | Valor |
+|----------|-------|
+| `{rfc}` | RFC de la empresa emisora |
+| `{razon_social}` | Nombre del área/razón social |
+| `{num_empleado}` | Número de empleado |
+| `{nombre_empleado}` | Nombre completo del empleado |
+| `{num_semana}` | Número de semana |
+| `{fecha_inicio}` | Fecha de inicio del período (dd/mm/aaaa) |
+| `{fecha_fin}` | Fecha de fin del período (dd/mm/aaaa) |
+
+La plantilla se guarda en `%APPDATA%\GestionTI\config.json` y persiste entre sesiones.
+
 ### Flujo de envío
 
 1. Colocar el archivo ZIP con los CFDI en `[ruta_base]\[año]\`
