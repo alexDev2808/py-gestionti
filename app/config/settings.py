@@ -29,6 +29,7 @@ _META_KEYS = ["SETUP_DONE"]
 _NOMINA_KEY = "NOMINA_CREDENTIALS"
 _NOMINA_PLANTILLA_KEY = "NOMINA_PLANTILLA"
 _BACKUP_FOLDER_KEY = "BACKUP_FOLDER"
+_FACTURAS_FOLDER_KEY = "FACTURAS_EXCEL_FOLDER"
 
 _DEFAULT_PLANTILLA: dict = {
     "subject": "CFDI Nómina Semana {num_semana} - {num_empleado} {nombre_empleado}",
@@ -90,6 +91,8 @@ class Settings:
     NOMINA_PLANTILLA: dict = _file_cfg.get(_NOMINA_PLANTILLA_KEY, {})
     # Carpeta de destino para respaldos de BD
     BACKUP_FOLDER: str = _file_cfg.get(_BACKUP_FOLDER_KEY, "C:\\GestionTI\\Backups")
+    # Carpeta de destino para los Excel de facturas
+    FACTURAS_EXCEL_FOLDER: str = _file_cfg.get(_FACTURAS_FOLDER_KEY, "C:\\GestionTI\\Facturas")
 
     @property
     def is_first_run(self) -> bool:
@@ -132,6 +135,13 @@ class Settings:
         self.BACKUP_FOLDER = path
         self.save()
 
+    def get_facturas_excel_folder(self) -> str:
+        return self.FACTURAS_EXCEL_FOLDER or "C:\\GestionTI\\Facturas"
+
+    def set_facturas_excel_folder(self, path: str) -> None:
+        self.FACTURAS_EXCEL_FOLDER = path
+        self.save()
+
     def set_nomina_credentials(self, id_area: int, tenant_id: str, client_id: str, client_secret: str) -> None:
         """Guarda las credenciales Graph API de un área cifrando el secreto con DPAPI."""
         from app.services.crypto_service import encrypt, is_encrypted
@@ -170,6 +180,7 @@ class Settings:
         data[_NOMINA_KEY] = self.NOMINA_CREDENTIALS if isinstance(self.NOMINA_CREDENTIALS, dict) else {}
         data[_NOMINA_PLANTILLA_KEY] = self.NOMINA_PLANTILLA if isinstance(self.NOMINA_PLANTILLA, dict) else {}
         data[_BACKUP_FOLDER_KEY] = self.BACKUP_FOLDER or "C:\\GestionTI\\Backups"
+        data[_FACTURAS_FOLDER_KEY] = self.FACTURAS_EXCEL_FOLDER or "C:\\GestionTI\\Facturas"
 
         _CONFIG_FILE.write_text(
             json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"

@@ -1,0 +1,751 @@
+"""Vista del módulo Facturas: árbol jerárquico Filial→Proveedor→Cliente + tabla detallada."""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
+import flet as ft
+
+from app.components.facturas_cliente_config_modal import FacturasClienteConfigModal
+from app.components.facturas_destinatarios_modal import FacturasDestinatariosModal
+from app.components.facturas_import_modal import FacturasImportModal
+from app.controllers.facturas_controller import FacturasController
+from app.dto.Facturas.facturas_response_dto import FacturasResponseDTO
+from app.services.permissions import PERM_FACTURAS_EDIT
+from app.views.base import View
+
+
+def _fmt_dt(d) -> str:
+    if not d:
+        return "—"
+    if isinstance(d, datetime):
+        return d.strftime("%Y-%m-%d %H:%M")
+    return str(d)
+
+
+def _fmt_date(d) -> str:
+    if not d:
+        return "—"
+    if isinstance(d, datetime):
+        return d.strftime("%Y-%m-%d")
+    return str(d)
+
+
+def _fmt_monto(v) -> str:
+    if v is None or v == "":
+        return "—"
+    try:
+        return f"${float(v):,.2f}"
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def _color_estado(estado: str) -> str:
+    return {
+        "pendiente":  ft.Colors.ORANGE_700,
+        "descargada": ft.Colors.BLUE_700,
+        "enviada":    ft.Colors.GREEN_700,
+        "error":      ft.Colors.RED_700,
+    }.get((estado or "").lower(), ft.Colors.ON_SURFACE_VARIANT)
+
+
+class FacturasView(View):
+    """Vista principal del módulo Facturas."""
+
+    key = "facturas"
+    title = "Facturas"
+    subtitle = "Importación, registro y envío de facturas por filial"
+
+    # Anchos fijos por columna para evitar colapsos en ListView (memoria del proyecto).
+    _COLS = [
+        ("ID", 50),
+        ("Fecha Corte", 95),
+        ("Mes", 80),
+        ("Año", 60),
+        ("Cuenta", 110),
+        ("Línea", 100),
+        ("Total", 95),
+        ("F. Límite", 95),
+        ("Convenio", 90),
+        ("Referencia", 110),
+        ("Descarga", 130),
+        ("Destinatarios", 200),
+        ("Estatus", 90),
+    ]
+    _ACCIONES_W = 170
+
+    def __init__(self, page: ft.Page, controller: Optional[FacturasController] = None):
+        super().__init__(page)
+        self._ctrl = controller or FacturasController()
+        self._import_modal: Optional[FacturasImportModal] = None
+        self._destinatarios_modal: Optional[FacturasDestinatariosModal] = None
+        self._config_modal: Optional[FacturasClienteConfigModal] = None
+
+        self._sel_filial: Optional[int] = None
+        self._sel_proveedor: Optional[int] = None
+        self._sel_cliente: Optional[int] = None
+
+        self._chrome_offset: int = 260
+        self._min_table_height: int = 240
+        self._prev_on_resized = None
+
+        self._header_text = ft.Text(
+            "Selecciona un nodo del árbol", size=13, weight=ft.FontWeight.W_600,
+            no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS,
+        )
+        self._counter_text = ft.Text(
+            "", size=12, color=ft.Colors.ON_SURFACE_VARIANT,
+            no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS,
+        )
+        self._progress = ft.ProgressBar(visible=False, height=4)
+
+        self._tree_container = ft.Column(spacing=2, scroll=ft.ScrollMode.AUTO, expand=True)
+        self._rows_container = ft.ListView(
+            expand=True,
+            spacing=0,
+            padding=0,
+            auto_scroll=False,
+        )
+        self._table_card = ft.Container(
+            border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+            border_radius=12,
+            bgcolor=ft.Colors.SURFACE,
+            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+            height=self._compute_table_height(),
+        )
+
+        can_edit = self.can(PERM_FACTURAS_EDIT)
+        self._btn_importar = ft.FilledButton(
+            "Importar",
+            icon=ft.Icons.UPLOAD_FILE,
+            tooltip="Importar ZIP de facturas para el cliente seleccionado",
+            visible=can_edit,
+            disabled=True,
+            on_click=lambda _: self._abrir_import_modal(),
+        )
+        self._btn_destinatarios_cli = ft.OutlinedButton(
+            "Configurar",
+            icon=ft.Icons.SETTINGS_OUTLINED,
+            tooltip="Configurar cliente: correos, ruta y plantilla",
+            visible=can_edit,
+            disabled=True,
+            on_click=lambda _: self._configurar_cliente(),
+        )
+        self._btn_recargar = ft.IconButton(
+            icon=ft.Icons.REFRESH, tooltip="Recargar",
+            on_click=lambda _: self._cargar_todo(),
+        )
+        self._btn_excel = ft.IconButton(
+            icon=ft.Icons.TABLE_VIEW_OUTLINED,
+            tooltip="Exportar Excel por filial",
+            on_click=lambda _: self._exportar_excel(),
+        )
+
+    # ---------- Lifecycle ----------
+
+    def build(self) -> ft.Control:
+        total_w = sum(w for _, w in self._COLS) + self._ACCIONES_W
+
+        # Tabla con scroll horizontal sincronizado: ambos (header y filas) viven dentro
+        # de un mismo Column con ancho fijo, envuelto por un Row con scroll horizontal.
+        self._table_inner = ft.Container(
+            width=total_w,
+            height=self._table_card.height,
+            content=ft.Column(
+                spacing=0,
+                expand=True,
+                controls=[
+                    self._build_header_table(),
+                    ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+                    self._rows_container,
+                ],
+            ),
+        )
+
+        self._table_card.content = ft.Row(
+            spacing=0,
+            scroll=ft.ScrollMode.AUTO,
+            vertical_alignment=ft.CrossAxisAlignment.START,
+            controls=[self._table_inner],
+        )
+
+        toolbar = ft.Row(
+            spacing=8,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[
+                ft.Column(
+                    expand=True, spacing=2, tight=True,
+                    controls=[self._header_text, self._counter_text],
+                ),
+                self._btn_destinatarios_cli,
+                self._btn_importar,
+                self._btn_excel,
+                self._btn_recargar,
+            ],
+        )
+
+        left = ft.Container(
+            width=300,
+            border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+            border_radius=12,
+            bgcolor=ft.Colors.SURFACE,
+            padding=ft.padding.symmetric(horizontal=8, vertical=10),
+            content=ft.Column(
+                expand=True, spacing=8,
+                controls=[
+                    ft.Row(
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        controls=[
+                            ft.Text("Estructura", size=13, weight=ft.FontWeight.W_600),
+                            ft.IconButton(
+                                icon=ft.Icons.UNFOLD_LESS, tooltip="Ver todas",
+                                icon_size=18, on_click=lambda _: self._limpiar_seleccion(),
+                            ),
+                        ],
+                    ),
+                    ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+                    self._tree_container,
+                ],
+            ),
+        )
+
+        right = ft.Container(
+            expand=True,
+            content=ft.Column(
+                expand=True,
+                spacing=10,
+                horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+                controls=[toolbar, self._progress, self._table_card],
+            ),
+        )
+
+        self._render_tabla()
+
+        return ft.Row(
+            spacing=12,
+            vertical_alignment=ft.CrossAxisAlignment.STRETCH,
+            controls=[left, right],
+        )
+
+    def on_enter(self) -> None:
+        resize_attr = self._resize_attr()
+        self._prev_on_resized = getattr(self.page, resize_attr, None)
+        setattr(self.page, resize_attr, self._handle_page_resized)
+        self._apply_table_height()
+        if not self._ctrl.loaded:
+            self._cargar_todo()
+
+    def on_leave(self) -> None:
+        resize_attr = self._resize_attr()
+        if getattr(self.page, resize_attr, None) == self._handle_page_resized:
+            setattr(self.page, resize_attr, self._prev_on_resized)
+        self._prev_on_resized = None
+
+    # ---------- Alto dinámico ----------
+
+    def _resize_attr(self) -> str:
+        return "on_resize" if hasattr(self.page, "on_resize") else "on_resized"
+
+    def _compute_table_height(self) -> float:
+        page_height = getattr(self.page, "height", None) or 0
+        if page_height <= 0:
+            return float(self._min_table_height + 240)
+        return float(max(self._min_table_height, page_height - self._chrome_offset))
+
+    def _apply_table_height(self) -> None:
+        h = self._compute_table_height()
+        self._table_card.height = h
+        if getattr(self, "_table_inner", None) is not None:
+            self._table_inner.height = h
+        self._safe_update()
+
+    def _handle_page_resized(self, e) -> None:
+        if callable(self._prev_on_resized):
+            try:
+                self._prev_on_resized(e)
+            except Exception:
+                pass
+        self._apply_table_height()
+
+    # ---------- Carga ----------
+
+    def _cargar_todo(self) -> None:
+        self._set_progress(True)
+
+        async def _do() -> None:
+            try:
+                await asyncio.to_thread(self._ctrl.recargar)
+                self._render_tree()
+                self._render_tabla()
+                self._actualizar_botones_seleccion()
+            except Exception as exc:
+                self._snackbar(f"Error al cargar: {exc}", error=True)
+            finally:
+                self._set_progress(False)
+            self._safe_update()
+
+        try:
+            asyncio.run_coroutine_threadsafe(_do(), asyncio.get_event_loop())
+        except RuntimeError:
+            self.page.run_task(_do)
+
+    # ---------- Árbol ----------
+
+    def _render_tree(self) -> None:
+        controls: list[ft.Control] = []
+        for filial in self._ctrl.filiales_list:
+            controls.append(self._tree_node(
+                label=filial.nombre, icon=ft.Icons.BUSINESS, level=0,
+                selected=(self._sel_filial == filial.id_filial
+                          and self._sel_proveedor is None and self._sel_cliente is None),
+                on_click=lambda f=filial: self._seleccionar(filial=f.id_filial),
+            ))
+            for prov in self._ctrl.proveedores_por_filial(filial.id_filial):
+                clientes = self._ctrl.clientes_por_proveedor(prov.id_factprov)
+                controls.append(self._tree_node(
+                    label=prov.nombre, icon=ft.Icons.STORE_OUTLINED, level=1,
+                    selected=(self._sel_proveedor == prov.id_factprov and self._sel_cliente is None),
+                    on_click=lambda p=prov: self._seleccionar(filial=p.id_filial, proveedor=p.id_factprov),
+                    trailing_count=len([f for f in self._ctrl.facturas_list if f.id_factprov == prov.id_factprov]),
+                ))
+                for cli in clientes:
+                    controls.append(self._tree_node(
+                        label=cli.nombre, icon=ft.Icons.PERSON_OUTLINE, level=2,
+                        selected=(self._sel_cliente == cli.id_factcli),
+                        on_click=lambda c=cli, p=prov: self._seleccionar(
+                            filial=p.id_filial, proveedor=p.id_factprov, cliente=c.id_factcli
+                        ),
+                        trailing_count=len([f for f in self._ctrl.facturas_list if f.id_factcli == cli.id_factcli]),
+                    ))
+        self._tree_container.controls = controls
+
+    def _tree_node(self, label: str, icon: str, level: int, selected: bool,
+                   on_click, trailing_count: Optional[int] = None) -> ft.Control:
+        bg = ft.Colors.PRIMARY_CONTAINER if selected else ft.Colors.TRANSPARENT
+        fg = ft.Colors.ON_PRIMARY_CONTAINER if selected else ft.Colors.ON_SURFACE
+        weight = ft.FontWeight.W_600 if (selected or level == 0) else ft.FontWeight.W_400
+        trailing = (
+            ft.Container(
+                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                border_radius=10,
+                padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                content=ft.Text(str(trailing_count), size=10, color=ft.Colors.ON_SURFACE_VARIANT),
+            )
+            if trailing_count is not None else ft.Container(width=0)
+        )
+        return ft.Container(
+            on_click=lambda _: on_click(),
+            ink=True, bgcolor=bg, border_radius=8,
+            padding=ft.padding.only(left=8 + 16 * level, right=8, top=6, bottom=6),
+            content=ft.Row(
+                spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                controls=[
+                    ft.Icon(icon, size=16, color=fg),
+                    ft.Text(label, size=13, weight=weight, color=fg, expand=True, no_wrap=True,
+                            overflow=ft.TextOverflow.ELLIPSIS),
+                    trailing,
+                ],
+            ),
+        )
+
+    def _seleccionar(self, filial: Optional[int] = None, proveedor: Optional[int] = None,
+                     cliente: Optional[int] = None) -> None:
+        self._sel_filial = filial
+        self._sel_proveedor = proveedor
+        self._sel_cliente = cliente
+        self._render_tree()
+        self._render_tabla()
+        self._actualizar_botones_seleccion()
+        self._safe_update()
+
+    def _limpiar_seleccion(self) -> None:
+        self._seleccionar(None, None, None)
+
+    def _actualizar_botones_seleccion(self) -> None:
+        cliente_sel = self._sel_cliente is not None
+        self._btn_importar.disabled = not cliente_sel
+        self._btn_destinatarios_cli.disabled = not cliente_sel
+
+    # ---------- Tabla ----------
+
+    def _build_header_table(self) -> ft.Control:
+        cells: list[ft.Control] = []
+        for label, w in self._COLS:
+            cells.append(ft.Container(
+                width=w,
+                padding=ft.padding.symmetric(horizontal=8, vertical=10),
+                content=ft.Text(label, size=11, weight=ft.FontWeight.W_600,
+                                color=ft.Colors.ON_SURFACE_VARIANT, no_wrap=True),
+            ))
+        cells.append(ft.Container(
+            width=self._ACCIONES_W,
+            padding=ft.padding.symmetric(horizontal=8, vertical=10),
+            content=ft.Text("Acciones", size=11, weight=ft.FontWeight.W_600,
+                            color=ft.Colors.ON_SURFACE_VARIANT, no_wrap=True),
+        ))
+        return ft.Container(
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            content=ft.Row(spacing=0, controls=cells),
+        )
+
+    def _render_tabla(self) -> None:
+        items = self._ctrl.filtrar_facturas(
+            id_filial=self._sel_filial,
+            id_factprov=self._sel_proveedor,
+            id_factcli=self._sel_cliente,
+        )
+
+        if self._sel_cliente is not None:
+            cli = next((c for c in self._ctrl.clientes_list if c.id_factcli == self._sel_cliente), None)
+            label = f"{cli.filial_nombre} / {cli.proveedor_nombre} / {cli.nombre}" if cli else "Cliente"
+        elif self._sel_proveedor is not None:
+            prov = next((p for p in self._ctrl.proveedores_list if p.id_factprov == self._sel_proveedor), None)
+            label = f"{prov.filial_nombre} / {prov.nombre}" if prov else "Proveedor"
+        elif self._sel_filial is not None:
+            fil = next((f for f in self._ctrl.filiales_list if f.id_filial == self._sel_filial), None)
+            label = fil.nombre if fil else "Filial"
+        else:
+            label = "Todas las facturas"
+
+        self._header_text.value = label
+        self._counter_text.value = f"{len(items)} factura(s)"
+
+        if not items:
+            empty = ft.Container(
+                padding=20,
+                content=ft.Column(
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=8,
+                    controls=[
+                        ft.Icon(ft.Icons.RECEIPT_LONG_OUTLINED, size=40, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ft.Text("Sin facturas. Selecciona un cliente y usa 'Importar ZIP'.",
+                                size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                    ],
+                ),
+            )
+            self._rows_container.controls = [empty]
+        else:
+            self._rows_container.controls = [self._build_row(it) for it in items]
+
+    def _build_row(self, item: FacturasResponseDTO) -> ft.Control:
+        can_edit = self.can(PERM_FACTURAS_EDIT)
+
+        valores = [
+            (str(item.id_factura), 50),
+            (_fmt_date(item.fecha_corte), 95),
+            (item.mes or "—", 80),
+            (str(item.anio) if item.anio else "—", 60),
+            (item.cuenta or "—", 110),
+            (item.linea or "—", 100),
+            (_fmt_monto(item.monto), 95),
+            (_fmt_date(item.fecha_limite_pago), 95),
+            (item.convenio or "—", 90),
+            (item.referencia_pago or "—", 110),
+            (_fmt_dt(item.fecha_descarga), 130),
+            (item.destinatarios or "—", 200),
+            (item.estado.capitalize() if item.estado else "—", 90),
+        ]
+
+        cells: list[ft.Control] = []
+        for i, (valor, w) in enumerate(valores):
+            color = _color_estado(item.estado) if i == len(valores) - 1 else None
+            weight = ft.FontWeight.W_600 if i == len(valores) - 1 else None
+            tooltip = item.error_envio if i == len(valores) - 1 and item.error_envio else None
+            cells.append(self._cell(valor, width=w, color=color, weight=weight, tooltip=tooltip))
+
+        actions = ft.Row(
+            spacing=0,
+            controls=[
+                ft.IconButton(
+                    icon=ft.Icons.PICTURE_AS_PDF_OUTLINED, tooltip="Abrir PDF",
+                    icon_size=18, on_click=lambda _, i=item: self._abrir_pdf(i),
+                ),
+                ft.IconButton(
+                    icon=ft.Icons.SEND_OUTLINED, tooltip="Reintentar envío",
+                    icon_size=18, visible=can_edit,
+                    on_click=lambda _, i=item: self._reintentar_envio(i),
+                ),
+                ft.IconButton(
+                    icon=ft.Icons.ALTERNATE_EMAIL, tooltip="Editar destinatarios",
+                    icon_size=18, visible=can_edit,
+                    on_click=lambda _, i=item: self._editar_destinatarios_factura(i),
+                ),
+                ft.IconButton(
+                    icon=ft.Icons.DELETE_OUTLINE, tooltip="Eliminar",
+                    icon_size=18, icon_color=ft.Colors.ERROR, visible=can_edit,
+                    on_click=lambda _, i=item: self._confirmar_eliminar(i),
+                ),
+            ],
+        )
+        cells.append(ft.Container(width=self._ACCIONES_W,
+                                  padding=ft.padding.symmetric(horizontal=4, vertical=2),
+                                  content=actions))
+
+        return ft.Container(
+            content=ft.Row(spacing=0, controls=cells),
+            border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
+        )
+
+    def _cell(self, value: str, width: int, color=None, weight=None, tooltip=None) -> ft.Container:
+        return ft.Container(
+            width=width,
+            padding=ft.padding.symmetric(horizontal=8, vertical=8),
+            tooltip=tooltip,
+            content=ft.Text(str(value), size=11, color=color, weight=weight,
+                            no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS),
+        )
+
+    # ---------- Importación ZIP ----------
+
+    def _abrir_import_modal(self) -> None:
+        cliente = next(
+            (c for c in self._ctrl.clientes_list if c.id_factcli == self._sel_cliente),
+            None,
+        )
+        if not cliente:
+            self._snackbar("Selecciona un cliente del árbol primero.", error=True)
+            return
+        self._import_modal = FacturasImportModal(
+            page=self.page,
+            cliente_nombre=f"{cliente.filial_nombre} / {cliente.proveedor_nombre} / {cliente.nombre}",
+            on_import=self._procesar_zip,
+            on_cancel=self._cerrar_import,
+            compute_destino=lambda m, a: self._ctrl.compute_destino(
+                self._sel_proveedor, self._sel_cliente, m, a
+            ),
+        )
+        self.page.show_dialog(self._import_modal.dialog)
+
+    def _cerrar_import(self) -> None:
+        if self._import_modal:
+            try:
+                self.page.pop_dialog()
+            except Exception:
+                pass
+        self._import_modal = None
+
+    def _procesar_zip(self, zip_path: Path, mes_idx: int, anio: int) -> None:
+        if self._sel_cliente is None or self._sel_proveedor is None:
+            self._cerrar_import()
+            self._snackbar("Selecciona cliente del árbol.", error=True)
+            return
+        self._cerrar_import()
+        self._set_progress(True)
+        usuario = self._get_username()
+
+        async def _do() -> None:
+            try:
+                ok, msg, resultado = await asyncio.to_thread(
+                    self._ctrl.importar_zip,
+                    zip_path, self._sel_proveedor, self._sel_cliente,
+                    mes_idx, anio, usuario,
+                )
+                self._snackbar(f"{'✓' if ok else '✗'} {msg}", error=not ok)
+                if resultado and any(not f.ok for f in resultado.importadas):
+                    detalle = "\n".join(
+                        f"• {f.pdf_path.name if f.pdf_path else '?'}: {f.error}"
+                        for f in resultado.importadas if not f.ok
+                    )
+                    self._mostrar_detalle("Detalle de errores", detalle)
+                if ok:
+                    await asyncio.to_thread(self._ctrl.cargar_facturas)
+                    self._render_tree()
+                    self._render_tabla()
+            except Exception as exc:
+                self._snackbar(f"✗ Error: {exc}", error=True)
+            finally:
+                self._set_progress(False)
+            self._safe_update()
+
+        try:
+            asyncio.run_coroutine_threadsafe(_do(), asyncio.get_event_loop())
+        except RuntimeError:
+            self.page.run_task(_do)
+
+    # ---------- Acciones por factura ----------
+
+    def _abrir_pdf(self, item: FacturasResponseDTO) -> None:
+        ok, msg = self._ctrl.abrir_pdf(item)
+        if not ok:
+            self._snackbar(msg, error=True)
+
+    def _reintentar_envio(self, item: FacturasResponseDTO) -> None:
+        self._set_progress(True)
+
+        async def _do() -> None:
+            try:
+                ok, msg = await asyncio.to_thread(self._ctrl.enviar_factura, item, None)
+                self._snackbar(f"{'✓' if ok else '✗'} {msg}", error=not ok)
+                await asyncio.to_thread(self._ctrl.cargar_facturas)
+                self._render_tabla()
+            except Exception as exc:
+                self._snackbar(f"✗ Error: {exc}", error=True)
+            finally:
+                self._set_progress(False)
+            self._safe_update()
+
+        try:
+            asyncio.run_coroutine_threadsafe(_do(), asyncio.get_event_loop())
+        except RuntimeError:
+            self.page.run_task(_do)
+
+    def _editar_destinatarios_factura(self, item: FacturasResponseDTO) -> None:
+        def guardar(valor: str) -> None:
+            self._cerrar_destinatarios()
+            ok, msg = self._ctrl.actualizar_destinatarios(item, valor)
+            self._snackbar(f"{'✓' if ok else '✗'} {msg}", error=not ok)
+            if ok:
+                self._cargar_todo()
+
+        self._destinatarios_modal = FacturasDestinatariosModal(
+            title=f"Destinatarios — Factura #{item.id_factura}",
+            descripcion="Estos destinatarios sobrescriben los del cliente para esta factura.",
+            valor_inicial=item.destinatarios,
+            on_save=guardar,
+            on_cancel=self._cerrar_destinatarios,
+        )
+        self.page.show_dialog(self._destinatarios_modal.dialog)
+
+    def _configurar_cliente(self) -> None:
+        cliente = next(
+            (c for c in self._ctrl.clientes_list if c.id_factcli == self._sel_cliente),
+            None,
+        )
+        if not cliente:
+            self._snackbar("Selecciona un cliente.", error=True)
+            return
+
+        def guardar(values: dict[str, str]) -> None:
+            self._cerrar_config()
+            ok, msg = self._ctrl.actualizar_config_cliente(
+                cliente.id_factcli,
+                values.get("correos", ""),
+                values.get("ruta_descarga", ""),
+                values.get("email_asunto", ""),
+                values.get("email_cuerpo", ""),
+            )
+            self._snackbar(f"{'✓' if ok else '✗'} {msg}", error=not ok)
+            if ok:
+                self._cargar_todo()
+
+        self._config_modal = FacturasClienteConfigModal(
+            page=self.page,
+            cliente=cliente,
+            on_save=guardar,
+            on_cancel=self._cerrar_config,
+        )
+        self.page.show_dialog(self._config_modal.dialog)
+
+    def _cerrar_config(self) -> None:
+        if self._config_modal:
+            try:
+                self.page.pop_dialog()
+            except Exception:
+                pass
+        self._config_modal = None
+
+    def _cerrar_destinatarios(self) -> None:
+        if self._destinatarios_modal:
+            try:
+                self.page.pop_dialog()
+            except Exception:
+                pass
+        self._destinatarios_modal = None
+
+    def _confirmar_eliminar(self, item: FacturasResponseDTO) -> None:
+        def cerrar() -> None:
+            dlg.open = False
+            self._safe_update()
+
+        def confirmar(_: ft.ControlEvent) -> None:
+            cerrar()
+            ok, msg = self._ctrl.eliminar_factura(item)
+            self._snackbar(f"{'✓' if ok else '✗'} {msg}", error=not ok)
+            if ok:
+                self._cargar_todo()
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Eliminar factura"),
+            content=ft.Text(
+                f"¿Seguro que deseas eliminar la factura #{item.id_factura} "
+                f"({item.cliente_nombre or item.proveedor_nombre} - {item.cuenta or '—'})?"
+                "\nNo se eliminarán los archivos en disco."
+            ),
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda _: cerrar()),
+                ft.FilledButton("Eliminar", on_click=confirmar,
+                                style=ft.ButtonStyle(bgcolor=ft.Colors.ERROR)),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        if dlg not in self.page.overlay:
+            self.page.overlay.append(dlg)
+        dlg.open = True
+        self._safe_update()
+
+    # ---------- Excel ----------
+
+    def _exportar_excel(self) -> None:
+        self._set_progress(True)
+
+        async def _do() -> None:
+            try:
+                ok, msg, _ = await asyncio.to_thread(self._ctrl.exportar_excel)
+                self._snackbar(f"{'✓' if ok else '✗'} {msg}", error=not ok)
+            except Exception as exc:
+                self._snackbar(f"✗ Error: {exc}", error=True)
+            finally:
+                self._set_progress(False)
+            self._safe_update()
+
+        try:
+            asyncio.run_coroutine_threadsafe(_do(), asyncio.get_event_loop())
+        except RuntimeError:
+            self.page.run_task(_do)
+
+    # ---------- Utilidades ----------
+
+    def _mostrar_detalle(self, titulo: str, texto: str) -> None:
+        dlg = ft.AlertDialog(
+            modal=False,
+            title=ft.Text(titulo),
+            content=ft.Container(
+                width=520,
+                content=ft.Text(texto, size=12, selectable=True),
+            ),
+            actions=[ft.TextButton("Cerrar", on_click=lambda _: self._cerrar_dlg(dlg))],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        if dlg not in self.page.overlay:
+            self.page.overlay.append(dlg)
+        dlg.open = True
+        self._safe_update()
+
+    def _cerrar_dlg(self, dlg: ft.AlertDialog) -> None:
+        dlg.open = False
+        self._safe_update()
+
+    def _get_username(self) -> str:
+        from app.services.auth_service import AuthUser
+        user = getattr(self.page, "data", None)
+        return user.username if isinstance(user, AuthUser) else ""
+
+    def _set_progress(self, visible: bool) -> None:
+        self._progress.visible = visible
+        self._safe_update()
+
+    def _snackbar(self, message: str, error: bool = False) -> None:
+        sb = ft.SnackBar(ft.Text(message), bgcolor="#F44336" if error else "#4CAF50")
+        self.page.overlay.append(sb)
+        sb.open = True
+        self._safe_update()
+
+    def _safe_update(self) -> None:
+        try:
+            self.page.update()
+        except Exception:
+            pass
