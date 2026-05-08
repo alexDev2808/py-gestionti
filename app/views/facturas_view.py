@@ -106,6 +106,7 @@ class FacturasView(View):
         self._sel_filial: Optional[int] = None
         self._sel_proveedor: Optional[int] = None
         self._sel_cliente: Optional[int] = None
+        self._search_text: str = ""
 
         self._chrome_offset: int = 260
         self._min_table_height: int = 240
@@ -190,6 +191,21 @@ class FacturasView(View):
             tooltip="Exportar Excel por filial",
             on_click=lambda _: self._exportar_excel(),
         )
+        self._search_field = ft.TextField(
+            hint_text="Buscar factura, cuenta, línea, monto, mes…",
+            prefix_icon=ft.Icons.SEARCH,
+            dense=True,
+            expand=True,
+            height=44,
+            text_size=13,
+            content_padding=ft.padding.symmetric(horizontal=12, vertical=8),
+            on_change=lambda e: self._on_buscar(e.control.value),
+        )
+        self._btn_limpiar_busqueda = ft.IconButton(
+            icon=ft.Icons.CLOSE, tooltip="Limpiar búsqueda",
+            visible=False, icon_size=18,
+            on_click=lambda _: self._limpiar_busqueda(),
+        )
 
     # ---------- Lifecycle ----------
 
@@ -270,6 +286,11 @@ class FacturasView(View):
                 self._btn_eliminar_lote,
             ],
         )
+        buscador_row = ft.Row(
+            spacing=4,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[self._search_field, self._btn_limpiar_busqueda],
+        )
         toolbar = ft.Column(
             spacing=8,
             tight=True,
@@ -286,6 +307,7 @@ class FacturasView(View):
                         self._btn_excel,
                     ],
                 ),
+                buscador_row,
                 acciones_row,
             ],
         )
@@ -355,13 +377,14 @@ class FacturasView(View):
     def _compute_chrome_offset(self) -> int:
         """Espacio total ocupado por chrome (header de la app, toolbar y márgenes).
 
-        La toolbar tiene 2 filas (título+iconos / botones de acción con wrap).
-        Cuando el ancho de la página es chico, los 5 botones de acción
-        envuelven a líneas adicionales y se agrega altura extra.
+        La toolbar tiene 3 filas (título+iconos / búsqueda / botones de acción
+        con wrap). Cuando el ancho de la página es chico, los 5 botones de
+        acción envuelven a líneas adicionales y se agrega altura extra.
         """
         base = self._chrome_offset
-        # Fila extra de la toolbar (título → 2 filas)
-        base += 56
+        # Filas extra de la toolbar (título base + búsqueda + acciones)
+        base += 56  # fila acciones
+        base += 52  # fila búsqueda (TextField height=44 + spacing)
         w = getattr(self.page, "width", None) or 0
         # Estimación del wrap: en pantallas estrechas los 5 botones bajan a
         # 2 o 3 sub-filas dentro del Row(wrap=True).
@@ -527,6 +550,49 @@ class FacturasView(View):
             if (f.estado or "").lower() != "enviada"
         ]
 
+    # ---------- Búsqueda ----------
+
+    def _on_buscar(self, valor: str) -> None:
+        nuevo = (valor or "").strip()
+        if nuevo == self._search_text:
+            return
+        self._search_text = nuevo
+        self._btn_limpiar_busqueda.visible = bool(nuevo)
+        self._render_tabla()
+        self._safe_update()
+
+    def _limpiar_busqueda(self) -> None:
+        if not self._search_text and not (self._search_field.value or ""):
+            return
+        self._search_text = ""
+        self._search_field.value = ""
+        self._btn_limpiar_busqueda.visible = False
+        self._render_tabla()
+        self._safe_update()
+
+    def _aplicar_busqueda(
+        self, items: list[FacturasResponseDTO],
+    ) -> list[FacturasResponseDTO]:
+        q = (self._search_text or "").lower().strip()
+        if not q:
+            return items
+        # Soporta múltiples términos separados por espacio (AND).
+        terms = [t for t in q.split() if t]
+
+        def haystack(f: FacturasResponseDTO) -> str:
+            monto_txt = f"{f.monto:.2f}" if f.monto is not None else ""
+            partes = [
+                f.numero_factura, f.cuenta, f.linea, f.mes,
+                str(f.anio) if f.anio else "",
+                monto_txt,
+                f.cliente_nombre, f.proveedor_nombre, f.filial_nombre,
+                f.estado, f.referencia_pago, f.convenio,
+                f.destinatarios,
+            ]
+            return " ".join(p for p in partes if p).lower()
+
+        return [f for f in items if all(t in haystack(f) for t in terms)]
+
     # ---------- Tabla ----------
 
     def _build_header_table(self) -> ft.Control:
@@ -550,11 +616,12 @@ class FacturasView(View):
         )
 
     def _render_tabla(self) -> None:
-        items = self._ctrl.filtrar_facturas(
+        items_base = self._ctrl.filtrar_facturas(
             id_filial=self._sel_filial,
             id_factprov=self._sel_proveedor,
             id_factcli=self._sel_cliente,
         )
+        items = self._aplicar_busqueda(items_base)
 
         if self._sel_cliente is not None:
             cli = next((c for c in self._ctrl.clientes_list if c.id_factcli == self._sel_cliente), None)
@@ -569,18 +636,26 @@ class FacturasView(View):
             label = "Todas las facturas"
 
         self._header_text.value = label
-        self._counter_text.value = f"{len(items)} factura(s)"
+        if self._search_text and len(items) != len(items_base):
+            self._counter_text.value = f"{len(items)} de {len(items_base)} factura(s)"
+        else:
+            self._counter_text.value = f"{len(items)} factura(s)"
 
         if not items:
+            if self._search_text and items_base:
+                icono = ft.Icons.SEARCH_OFF
+                msg = f"Sin coincidencias para «{self._search_text}»."
+            else:
+                icono = ft.Icons.RECEIPT_LONG_OUTLINED
+                msg = "Sin facturas. Selecciona un cliente y usa 'Importar ZIP'."
             empty = ft.Container(
                 padding=20,
                 content=ft.Column(
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     spacing=8,
                     controls=[
-                        ft.Icon(ft.Icons.RECEIPT_LONG_OUTLINED, size=40, color=ft.Colors.ON_SURFACE_VARIANT),
-                        ft.Text("Sin facturas. Selecciona un cliente y usa 'Importar ZIP'.",
-                                size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ft.Icon(icono, size=40, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ft.Text(msg, size=12, color=ft.Colors.ON_SURFACE_VARIANT),
                     ],
                 ),
             )
