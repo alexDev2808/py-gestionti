@@ -314,6 +314,22 @@ class FacturasZipImporter:
             xs = x.stem.lower()
             if pdf_stem in xs or xs in pdf_stem:
                 return x
+        # 4) Fallback aditivo: comparar el primer bloque de dígitos tras
+        #    normalizar ceros a la izquierda. Cubre nombres tipo
+        #    `FACTURA_0074992168.pdf` ↔ `CFDI_74992168_(202603).xml`
+        #    donde el PDF trae padding de ceros y el XML un sufijo `_(YYYYMM)`.
+        #    Excluimos `CP*` (complementos de pago) para no confundirlos
+        #    con la factura.
+        m = re.search(r"\d+", pdf.stem)
+        pdf_num = m.group(0).lstrip("0") if m else ""
+        if pdf_num:
+            for x in xmls:
+                if x.name.upper().startswith("CP"):
+                    continue
+                xm = re.search(r"\d+", x.stem)
+                x_num = xm.group(0).lstrip("0") if xm else ""
+                if x_num and x_num == pdf_num:
+                    return x
         return None
 
     def _mover(self, src: Path, dst: Path) -> Path:

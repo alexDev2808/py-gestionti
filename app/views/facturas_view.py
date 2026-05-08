@@ -161,6 +161,26 @@ class FacturasView(View):
             disabled=True,
             on_click=lambda _: self._configurar_cliente(),
         )
+        self._btn_enviar_lote = ft.FilledButton(
+            "Enviar todas",
+            icon=ft.Icons.OUTGOING_MAIL,
+            tooltip="Enviar en un solo correo todas las facturas pendientes "
+                    "del cliente seleccionado (Telcel: una tabla con todas; "
+                    "otros: envío individual por factura)",
+            visible=False,
+            disabled=True,
+            on_click=lambda _: self._enviar_lote(),
+        )
+        self._btn_eliminar_lote = ft.OutlinedButton(
+            "Eliminar todas",
+            icon=ft.Icons.DELETE_SWEEP_OUTLINED,
+            tooltip="Eliminar todas las facturas del cliente seleccionado "
+                    "(solo registros en BD; no toca archivos en disco)",
+            visible=False,
+            disabled=True,
+            style=ft.ButtonStyle(color=ft.Colors.ERROR),
+            on_click=lambda _: self._confirmar_eliminar_lote(),
+        )
         self._btn_recargar = ft.IconButton(
             icon=ft.Icons.REFRESH, tooltip="Recargar",
             on_click=lambda _: self._cargar_todo(),
@@ -235,19 +255,38 @@ class FacturasView(View):
             controls=[self._table_inner],
         )
 
-        toolbar = ft.Row(
+        acciones_row = ft.Row(
             spacing=8,
+            wrap=True,
+            run_spacing=8,
+            alignment=ft.MainAxisAlignment.END,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            visible=self.can(PERM_FACTURAS_EDIT),
             controls=[
-                ft.Column(
-                    expand=True, spacing=2, tight=True,
-                    controls=[self._header_text, self._counter_text],
-                ),
                 self._btn_nuevo_cli,
                 self._btn_destinatarios_cli,
                 self._btn_importar,
-                self._btn_excel,
-                self._btn_recargar,
+                self._btn_enviar_lote,
+                self._btn_eliminar_lote,
+            ],
+        )
+        toolbar = ft.Column(
+            spacing=8,
+            tight=True,
+            controls=[
+                ft.Row(
+                    spacing=8,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[
+                        ft.Column(
+                            expand=True, spacing=2, tight=True,
+                            controls=[self._header_text, self._counter_text],
+                        ),
+                        self._btn_recargar,
+                        self._btn_excel,
+                    ],
+                ),
+                acciones_row,
             ],
         )
 
@@ -313,11 +352,30 @@ class FacturasView(View):
     def _resize_attr(self) -> str:
         return "on_resize" if hasattr(self.page, "on_resize") else "on_resized"
 
+    def _compute_chrome_offset(self) -> int:
+        """Espacio total ocupado por chrome (header de la app, toolbar y márgenes).
+
+        La toolbar tiene 2 filas (título+iconos / botones de acción con wrap).
+        Cuando el ancho de la página es chico, los 5 botones de acción
+        envuelven a líneas adicionales y se agrega altura extra.
+        """
+        base = self._chrome_offset
+        # Fila extra de la toolbar (título → 2 filas)
+        base += 56
+        w = getattr(self.page, "width", None) or 0
+        # Estimación del wrap: en pantallas estrechas los 5 botones bajan a
+        # 2 o 3 sub-filas dentro del Row(wrap=True).
+        if w and w < 1100:
+            base += 48
+        if w and w < 800:
+            base += 48
+        return base
+
     def _compute_table_height(self) -> float:
         page_height = getattr(self.page, "height", None) or 0
         if page_height <= 0:
             return float(self._min_table_height + 240)
-        return float(max(self._min_table_height, page_height - self._chrome_offset))
+        return float(max(self._min_table_height, page_height - self._compute_chrome_offset()))
 
     def _apply_table_height(self) -> None:
         h = self._compute_table_height()
@@ -435,6 +493,39 @@ class FacturasView(View):
         self._btn_importar.disabled = not cliente_sel
         self._btn_destinatarios_cli.disabled = not cliente_sel
         self._btn_nuevo_cli.disabled = not proveedor_sel
+
+        can_edit = self.can(PERM_FACTURAS_EDIT)
+        if cliente_sel and can_edit:
+            pendientes = self._facturas_pendientes_cliente()
+            self._btn_enviar_lote.text = f"Enviar todas ({len(pendientes)})"
+            self._btn_enviar_lote.visible = True
+            self._btn_enviar_lote.disabled = len(pendientes) == 0
+
+            todas = self._facturas_cliente()
+            self._btn_eliminar_lote.text = f"Eliminar todas ({len(todas)})"
+            self._btn_eliminar_lote.visible = True
+            self._btn_eliminar_lote.disabled = len(todas) == 0
+        else:
+            self._btn_enviar_lote.visible = False
+            self._btn_enviar_lote.disabled = True
+            self._btn_eliminar_lote.visible = False
+            self._btn_eliminar_lote.disabled = True
+
+    def _facturas_cliente(self) -> list[FacturasResponseDTO]:
+        """Todas las facturas del cliente seleccionado (cualquier estado)."""
+        if self._sel_cliente is None:
+            return []
+        return [
+            f for f in self._ctrl.facturas_list
+            if f.id_factcli == self._sel_cliente
+        ]
+
+    def _facturas_pendientes_cliente(self) -> list[FacturasResponseDTO]:
+        """Pendientes (estado != 'enviada') del cliente seleccionado."""
+        return [
+            f for f in self._facturas_cliente()
+            if (f.estado or "").lower() != "enviada"
+        ]
 
     # ---------- Tabla ----------
 
@@ -637,6 +728,105 @@ class FacturasView(View):
         ok, msg = self._ctrl.abrir_pdf(item)
         if not ok:
             self._snackbar(msg, error=True)
+
+    def _confirmar_eliminar_lote(self) -> None:
+        """Pide confirmación antes de borrar todas las facturas del cliente."""
+        todas = self._facturas_cliente()
+        if not todas:
+            self._snackbar("No hay facturas que eliminar.", error=True)
+            return
+
+        cli = next(
+            (c for c in self._ctrl.clientes_list if c.id_factcli == self._sel_cliente),
+            None,
+        )
+        nombre_cli = cli.nombre if cli else "este cliente"
+
+        def cerrar() -> None:
+            dlg.open = False
+            self._safe_update()
+
+        def confirmar(_: ft.ControlEvent) -> None:
+            cerrar()
+            self._eliminar_lote(todas)
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Eliminar todas las facturas"),
+            content=ft.Text(
+                f"¿Seguro que deseas eliminar las {len(todas)} factura(s) de "
+                f"{nombre_cli}?\nNo se eliminarán los archivos en disco."
+            ),
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda _: cerrar()),
+                ft.FilledButton(
+                    "Eliminar todas",
+                    on_click=confirmar,
+                    style=ft.ButtonStyle(bgcolor=ft.Colors.ERROR),
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        if dlg not in self.page.overlay:
+            self.page.overlay.append(dlg)
+        dlg.open = True
+        self._safe_update()
+
+    def _eliminar_lote(self, items: list[FacturasResponseDTO]) -> None:
+        self._set_progress(True)
+
+        async def _do() -> None:
+            try:
+                ok, msg = await asyncio.to_thread(
+                    self._ctrl.eliminar_facturas_lote, items,
+                )
+                self._snackbar(f"{'✓' if ok else '✗'} {msg}", error=not ok)
+                await asyncio.to_thread(self._ctrl.cargar_facturas)
+                self._render_tabla()
+                self._actualizar_botones_seleccion()
+            except Exception as exc:
+                self._snackbar(f"✗ Error: {exc}", error=True)
+            finally:
+                self._set_progress(False)
+            self._safe_update()
+
+        try:
+            asyncio.run_coroutine_threadsafe(_do(), asyncio.get_event_loop())
+        except RuntimeError:
+            self.page.run_task(_do)
+
+    def _enviar_lote(self) -> None:
+        """Envía todas las facturas pendientes del cliente seleccionado.
+
+        Telcel se agrupa por (mes, año) en un solo correo por grupo; otros
+        proveedores se envían individualmente.
+        """
+        pendientes = self._facturas_pendientes_cliente()
+        if not pendientes:
+            self._snackbar("No hay facturas pendientes que enviar.", error=True)
+            return
+
+        self._set_progress(True)
+
+        async def _do() -> None:
+            try:
+                ok, msg = await asyncio.to_thread(
+                    self._ctrl.enviar_facturas_lote, pendientes, None,
+                )
+                self._snackbar(f"{'✓' if ok else '✗'} {msg}", error=not ok)
+                await asyncio.to_thread(self._ctrl.cargar_facturas)
+                self._render_tabla()
+                self._actualizar_botones_seleccion()
+            except Exception as exc:
+                self._snackbar(f"✗ Error: {exc}", error=True)
+            finally:
+                self._set_progress(False)
+            self._safe_update()
+
+        try:
+            asyncio.run_coroutine_threadsafe(_do(), asyncio.get_event_loop())
+        except RuntimeError:
+            self.page.run_task(_do)
 
     def _reintentar_envio(self, item: FacturasResponseDTO) -> None:
         self._set_progress(True)

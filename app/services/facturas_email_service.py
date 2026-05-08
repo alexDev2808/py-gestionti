@@ -94,6 +94,40 @@ def construir_tabla_html(
     )
 
 
+def construir_tabla_html_telcel_lote(facturas: list) -> str:
+    """Tabla HTML multi-fila para envío en lote de facturas Telcel.
+
+    Mismas columnas que `construir_tabla_html` con una fila por factura.
+    """
+    headers = ["MES", "Convenio", "Referencia", "Factura", "Línea",
+               "Total a pagar", "Fecha límite de pago"]
+    th_cells = "".join(f'<th style="{_TH_STYLE}">{_esc(h)}</th>' for h in headers)
+
+    rows: list[str] = []
+    for f in facturas:
+        monto = getattr(f, "monto", None)
+        total_txt = f"$ {monto:,.2f}" if monto is not None else "—"
+        flim = getattr(f, "fecha_limite_pago", None)
+        fecha_limite = flim.strftime("%d/%m/%Y") if flim else "—"
+        td_cells = "".join([
+            _td(getattr(f, "mes", "") or "—"),
+            _td(getattr(f, "convenio", "") or "—", align="right"),
+            _td(getattr(f, "referencia_pago", "") or "—"),
+            _td(getattr(f, "numero_factura", "") or "—"),
+            _td(getattr(f, "linea", "") or "—"),
+            _td(total_txt),
+            _td(fecha_limite, align="right"),
+        ])
+        rows.append(f"<tr>{td_cells}</tr>")
+
+    return (
+        f'<table cellspacing="0" cellpadding="0" style="{_TABLE_STYLE}">'
+        f'<thead><tr>{th_cells}</tr></thead>'
+        f'<tbody>{"".join(rows)}</tbody>'
+        f'</table>'
+    )
+
+
 def construir_tabla_html_alestra(
     mes: str,
     numero_factura: str,
@@ -297,6 +331,64 @@ class FacturasEmailService:
         cuerpo_html = self._aplicar(cuerpo_html, ctx)
 
         # Fallbacks si el usuario olvidó incluir los placeholders
+        if "{tabla_factura}" not in cuerpo_tpl and tabla not in cuerpo_html:
+            cuerpo_html += tabla
+        if "{firma}" not in cuerpo_tpl and FIRMA_DEFAULT not in cuerpo_html:
+            cuerpo_html += FIRMA_DEFAULT
+
+        return asunto, cuerpo_html
+
+    def construir_mensaje_telcel_lote(
+        self,
+        cliente: str,
+        mes: str,
+        anio: int,
+        facturas: list,
+        plantilla_asunto: str = "",
+        plantilla_cuerpo: str = "",
+    ) -> tuple[str, str]:
+        """Genera (asunto, cuerpoHTML) para envío en lote de facturas Telcel.
+
+        La tabla del cuerpo lleva una fila por factura (y un total acumulado).
+        Reusa la plantilla del cliente; los placeholders por línea
+        ({cuenta}, {linea}, {convenio}, {referencia}, {numero_factura})
+        quedan vacíos porque no aplican al lote.
+        """
+        tabla = construir_tabla_html_telcel_lote(facturas)
+        n = len(facturas)
+        total_acum = sum(
+            float(getattr(f, "monto", 0) or 0) for f in facturas
+        )
+        ctx = {
+            "cliente": cliente or "",
+            "mes": mes or "",
+            "anio": str(anio) if anio else "",
+            "total": f"${total_acum:,.2f} MN",
+            "n_facturas": str(n),
+            "tabla_factura": tabla,
+            "firma": FIRMA_DEFAULT,
+            # Placeholders por-línea no aplican en lote.
+            "cuenta": "",
+            "linea": "",
+            "fecha_corte": "",
+            "fecha_limite": "",
+            "convenio": "",
+            "referencia": "",
+            "numero_factura": "",
+            "numero_cliente": "",
+            "numero_cuenta": "",
+        }
+        asunto_tpl = (plantilla_asunto or self.PLANTILLA_ASUNTO_DEFAULT).strip()
+        cuerpo_tpl = plantilla_cuerpo or self.PLANTILLA_CUERPO_DEFAULT
+
+        asunto_ctx = {k: v for k, v in ctx.items() if k not in ("tabla_factura", "firma")}
+        asunto = self._aplicar(asunto_tpl, asunto_ctx)
+
+        cuerpo_html = cuerpo_tpl
+        if "<" not in cuerpo_html and ">" not in cuerpo_html:
+            cuerpo_html = "<p>" + cuerpo_html.replace("\n\n", "</p><p>").replace("\n", "<br>") + "</p>"
+        cuerpo_html = self._aplicar(cuerpo_html, ctx)
+
         if "{tabla_factura}" not in cuerpo_tpl and tabla not in cuerpo_html:
             cuerpo_html += tabla
         if "{firma}" not in cuerpo_tpl and FIRMA_DEFAULT not in cuerpo_html:

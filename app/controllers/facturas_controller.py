@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -162,6 +163,26 @@ class FacturasController:
         ok, msg, _ = self.facturas.eliminar(item.id_factura)
         return ok, msg
 
+    def eliminar_facturas_lote(
+        self,
+        items: list[FacturasResponseDTO],
+    ) -> tuple[bool, str]:
+        """Elimina en lote (solo registros en BD; no toca archivos en disco)."""
+        if not items:
+            return False, "No hay facturas que eliminar."
+        ok_count = 0
+        err_count = 0
+        for f in items:
+            ok, _msg = self.eliminar_factura(f)
+            if ok:
+                ok_count += 1
+            else:
+                err_count += 1
+        partes = [f"{ok_count} eliminada(s)"]
+        if err_count:
+            partes.append(f"{err_count} con error")
+        return ok_count > 0, " · ".join(partes)
+
     def abrir_pdf(self, item: FacturasResponseDTO) -> tuple[bool, str]:
         if not item.ruta_pdf:
             return False, "La factura no tiene PDF asociado."
@@ -273,6 +294,27 @@ class FacturasController:
         if item.ruta_xml:
             adjuntos.append(Path(item.ruta_xml))
 
+        # Fallback aditivo: si el XML no quedó enlazado en BD (p.ej. import
+        # previo donde el pareo falló por ceros a la izquierda en el nombre
+        # del PDF), intentamos resolverlo matcheando el primer bloque
+        # numérico del PDF contra el del XML `CFDI*.xml` en la misma carpeta
+        # (excluyendo complementos de pago `CP*`).
+        if not item.ruta_xml and item.ruta_pdf:
+            pdf_path = Path(item.ruta_pdf)
+            carpeta = pdf_path.parent
+            if carpeta.exists():
+                m = re.search(r"\d+", pdf_path.stem)
+                pdf_num = m.group(0).lstrip("0") if m else ""
+                if pdf_num:
+                    for x in sorted(carpeta.glob("CFDI*.xml")):
+                        if x.name.upper().startswith("CP"):
+                            continue
+                        xm = re.search(r"\d+", x.stem)
+                        x_num = xm.group(0).lstrip("0") if xm else ""
+                        if x_num and x_num == pdf_num and x not in adjuntos:
+                            adjuntos.append(x)
+                            break
+
         # Alestra: adjuntar también el/los complemento(s) de pago (archivos
         # `CP*.pdf` / `CP*.xml`) que estén en la misma carpeta destino que la
         # factura. Los CP se archivan ahí durante el import sin pasar por la BD.
@@ -334,6 +376,109 @@ class FacturasController:
             return True, resultado.mensaje
         self.facturas.marcar_error(item.id_factura, resultado.error or resultado.mensaje)
         return False, resultado.mensaje
+
+    def enviar_facturas_lote(
+        self,
+        items: list[FacturasResponseDTO],
+        destinatarios: Optional[str] = None,
+    ) -> tuple[bool, str]:
+        """Envía un lote de facturas pendientes.
+
+        - Telcel: agrupa por (cliente, mes, año) y manda 1 correo por grupo
+          con todos los PDFs/XMLs adjuntos y una tabla multi-fila.
+        - Otros proveedores (Alestra, etc.): cada factura se envía como correo
+          individual reutilizando `enviar_factura` (que ya adjunta CP* para
+          Alestra).
+        """
+        pendientes = [
+            f for f in (items or [])
+            if (f.estado or "").lower() != "enviada"
+        ]
+        if not pendientes:
+            return False, "No hay facturas pendientes que enviar."
+
+        telcel = [f for f in pendientes if (f.proveedor_nombre or "").strip().lower() == "telcel"]
+        otros = [f for f in pendientes if (f.proveedor_nombre or "").strip().lower() != "telcel"]
+
+        grupos_telcel: dict[tuple, list[FacturasResponseDTO]] = defaultdict(list)
+        for f in telcel:
+            grupos_telcel[(f.id_factcli, f.mes, f.anio)].append(f)
+
+        correos_ok = 0
+        facturas_ok = 0
+        errores: list[str] = []
+
+        for grupo in grupos_telcel.values():
+            ok, msg = self._enviar_grupo_telcel(grupo, destinatarios)
+            if ok:
+                correos_ok += 1
+                facturas_ok += len(grupo)
+            else:
+                errores.append(msg)
+
+        for f in otros:
+            ok, msg = self.enviar_factura(f, destinatarios)
+            if ok:
+                correos_ok += 1
+                facturas_ok += 1
+            else:
+                etiqueta = f.numero_factura or f"#{f.id_factura}"
+                errores.append(f"{etiqueta}: {msg}")
+
+        if not facturas_ok and not errores:
+            return False, "No se envió ninguna factura."
+
+        partes = [f"{facturas_ok} factura(s) en {correos_ok} correo(s)"]
+        if errores:
+            partes.append("Errores: " + "; ".join(errores))
+        return facturas_ok > 0, " · ".join(partes)
+
+    def _enviar_grupo_telcel(
+        self,
+        grupo: list[FacturasResponseDTO],
+        destinatarios: Optional[str] = None,
+    ) -> tuple[bool, str]:
+        """Envía un grupo de facturas Telcel del mismo cliente y período en un solo correo."""
+        if not grupo:
+            return False, "Grupo vacío."
+        primero = grupo[0]
+        cliente = self.get_cliente(primero.id_factcli) if primero.id_factcli else None
+        destinos = (destinatarios or "").strip()
+        if not destinos and cliente:
+            destinos = cliente.correos_destino or ""
+        if not destinos:
+            for f in grupo:
+                self.facturas.marcar_error(f.id_factura, "Sin destinatarios configurados.")
+            return False, f"Sin destinatarios para {primero.cliente_nombre or 'cliente'}."
+
+        adjuntos: list[Path] = []
+        for f in grupo:
+            if f.ruta_pdf:
+                adjuntos.append(Path(f.ruta_pdf))
+            if f.ruta_xml:
+                adjuntos.append(Path(f.ruta_xml))
+        if not adjuntos:
+            return False, f"Sin adjuntos para grupo {primero.mes} {primero.anio}."
+
+        plantilla_asunto = cliente.email_asunto if cliente else ""
+        plantilla_cuerpo = cliente.email_cuerpo if cliente else ""
+        asunto, cuerpo = self.email.construir_mensaje_telcel_lote(
+            cliente=primero.cliente_nombre or "",
+            mes=primero.mes or "",
+            anio=primero.anio or 0,
+            facturas=grupo,
+            plantilla_asunto=plantilla_asunto,
+            plantilla_cuerpo=plantilla_cuerpo,
+        )
+
+        resultado = self.email.enviar(destinos, asunto, cuerpo, adjuntos)
+        if resultado.ok:
+            for f in grupo:
+                self.facturas.marcar_enviada(f.id_factura, destinos)
+            return True, f"{len(grupo)} factura(s) — {primero.mes} {primero.anio}"
+        for f in grupo:
+            self.facturas.marcar_error(f.id_factura, resultado.error or resultado.mensaje)
+        return False, f"{primero.mes} {primero.anio}: {resultado.error or resultado.mensaje}"
 
     # ---------- Excel ----------
 
