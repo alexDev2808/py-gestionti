@@ -203,14 +203,51 @@ class FacturasController:
         except Exception as exc:
             return False, f"Error al importar: {exc}", None
 
+        return self._resumir_import(resultado)
+
+    def importar_carpeta(
+        self,
+        carpeta: Path,
+        id_factprov: int,
+        id_factcli: int,
+        mes_idx: int,
+        anio: int,
+        creado_por: str = "",
+    ) -> tuple[bool, str, Optional[ResultadoImport]]:
+        """Importa los PDFs de una carpeta (sin descompresión, sin renombrado)."""
+        proveedor = self.get_proveedor(id_factprov)
+        cliente = self.get_cliente(id_factcli)
+        if not proveedor or not cliente:
+            return False, "Selecciona un proveedor y cliente válidos.", None
+        try:
+            resultado = self.importer.importar_carpeta(
+                carpeta=carpeta,
+                proveedor=proveedor,
+                cliente=cliente,
+                mes_idx=mes_idx,
+                anio=anio,
+                creado_por=creado_por,
+            )
+        except FileNotFoundError as exc:
+            return False, str(exc), None
+        except Exception as exc:
+            return False, f"Error al importar: {exc}", None
+
+        return self._resumir_import(resultado)
+
+    @staticmethod
+    def _resumir_import(resultado: ResultadoImport) -> tuple[bool, str, ResultadoImport]:
         ok_count = sum(1 for f in resultado.importadas if f.ok)
-        err_count = len(resultado.importadas) - ok_count
+        skipped_count = sum(1 for f in resultado.importadas if f.skipped)
+        err_count = len(resultado.importadas) - ok_count - skipped_count
         partes = [f"{ok_count} importadas"]
+        if skipped_count:
+            partes.append(f"{skipped_count} complementos archivados")
         if err_count:
             partes.append(f"{err_count} con error")
         if resultado.errores:
             partes.append("; ".join(resultado.errores))
-        return ok_count > 0, " · ".join(partes), resultado
+        return (ok_count + skipped_count) > 0, " · ".join(partes), resultado
 
     # ---------- Envío por correo ----------
 

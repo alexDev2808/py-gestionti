@@ -31,3 +31,18 @@ dist/
 
 # Config persistente con credenciales cifradas (generado en tiempo de ejecución)
 config.json
+
+# Outputs locales de los scripts de diagnóstico (scripts/diagnose_*.py, etc.)
+scripts/*.out
+scripts/*.txt
+scripts/output/
+
+# Carpetas locales de facturas/nóminas de prueba (las rutas reales se configuran
+# por cliente desde la app y normalmente apuntan fuera del repo)
+/facturas_test/
+/nominas_test/
+/Facturas/
+/Backups/
+
+# Logs de ejecución
+*.log

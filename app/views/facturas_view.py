@@ -60,21 +60,40 @@ class FacturasView(View):
     subtitle = "Importación, registro y envío de facturas por filial"
 
     # Anchos fijos por columna para evitar colapsos en ListView (memoria del proyecto).
-    _COLS = [
-        ("ID", 50),
-        ("Fecha Corte", 95),
-        ("Mes", 80),
-        ("Año", 60),
-        ("Cuenta", 110),
-        ("Línea", 100),
-        ("Total", 95),
-        ("F. Límite", 95),
-        ("Convenio", 90),
-        ("Referencia", 110),
-        ("Descarga", 130),
-        ("Destinatarios", 200),
-        ("Estatus", 90),
+    # Cada entrada: (label, width, getter). El getter recibe un FacturasResponseDTO
+    # y devuelve el string a mostrar. La columna de estado debe ir SIEMPRE al final
+    # (se le aplica color/weight/tooltip por posición).
+    _COLS_TELCEL = [
+        ("ID",            50,  lambda i: str(i.id_factura)),
+        ("Fecha Corte",   95,  lambda i: _fmt_date(i.fecha_corte)),
+        ("Mes",           80,  lambda i: i.mes or "—"),
+        ("Año",           60,  lambda i: str(i.anio) if i.anio else "—"),
+        ("Cuenta",        110, lambda i: i.cuenta or "—"),
+        ("Línea",         100, lambda i: i.linea or "—"),
+        ("Total",         95,  lambda i: _fmt_monto(i.monto)),
+        ("F. Límite",     95,  lambda i: _fmt_date(i.fecha_limite_pago)),
+        ("Convenio",      90,  lambda i: i.convenio or "—"),
+        ("Referencia",    110, lambda i: i.referencia_pago or "—"),
+        ("Descarga",      130, lambda i: _fmt_dt(i.fecha_descarga)),
+        ("Destinatarios", 200, lambda i: i.destinatarios or "—"),
+        ("Estatus",       90,  lambda i: i.estado.capitalize() if i.estado else "—"),
     ]
+
+    _COLS_ALESTRA = [
+        ("ID",                 50,  lambda i: str(i.id_factura)),
+        ("Fecha Corte",        95,  lambda i: _fmt_date(i.fecha_corte)),
+        ("Mes",                80,  lambda i: i.mes or "—"),
+        ("Año",                60,  lambda i: str(i.anio) if i.anio else "—"),
+        ("No. de factura",     110, lambda i: i.numero_factura or "—"),
+        ("Número de cliente",  100, lambda i: i.linea or "—"),
+        ("Número de cuenta",   90,  lambda i: i.cuenta or "—"),
+        ("Total",              95,  lambda i: _fmt_monto(i.monto)),
+        ("F. Límite",          95,  lambda i: _fmt_date(i.fecha_limite_pago)),
+        ("Descarga",           130, lambda i: _fmt_dt(i.fecha_descarga)),
+        ("Destinatarios",      200, lambda i: i.destinatarios or "—"),
+        ("Estatus",            90,  lambda i: i.estado.capitalize() if i.estado else "—"),
+    ]
+
     _ACCIONES_W = 170
 
     def __init__(self, page: ft.Page, controller: Optional[FacturasController] = None):
@@ -118,10 +137,18 @@ class FacturasView(View):
         )
 
         can_edit = self.can(PERM_FACTURAS_EDIT)
+        self._btn_nuevo_cli = ft.OutlinedButton(
+            "Nuevo cliente",
+            icon=ft.Icons.PERSON_ADD_OUTLINED,
+            tooltip="Crear un nuevo cliente bajo el proveedor seleccionado",
+            visible=can_edit,
+            disabled=True,
+            on_click=lambda _: self._nuevo_cliente(),
+        )
         self._btn_importar = ft.FilledButton(
             "Importar",
             icon=ft.Icons.UPLOAD_FILE,
-            tooltip="Importar ZIP de facturas para el cliente seleccionado",
+            tooltip="Importar facturas para el cliente seleccionado",
             visible=can_edit,
             disabled=True,
             on_click=lambda _: self._abrir_import_modal(),
@@ -146,8 +173,44 @@ class FacturasView(View):
 
     # ---------- Lifecycle ----------
 
+    # ---------- Layout de columnas dinámico ----------
+
+    def _proveedor_nombre_actual(self) -> str:
+        """Resuelve el nombre del proveedor en scope desde la selección actual."""
+        pid = self._sel_proveedor
+        if pid is None and self._sel_cliente is not None:
+            cli = next((c for c in self._ctrl.clientes_list
+                        if c.id_factcli == self._sel_cliente), None)
+            if cli:
+                pid = cli.id_factprov
+        if pid is None:
+            return ""
+        prov = next((p for p in self._ctrl.proveedores_list
+                     if p.id_factprov == pid), None)
+        return (prov.nombre if prov else "") or ""
+
+    def _cols_actuales(self) -> list:
+        """Devuelve el layout de columnas según el proveedor seleccionado.
+
+        Sin selección de proveedor (raíz, filial, "Todas") cae a Telcel, que
+        es el layout original con más columnas.
+        """
+        nombre = self._proveedor_nombre_actual().strip().lower()
+        if nombre == "alestra":
+            return self._COLS_ALESTRA
+        return self._COLS_TELCEL
+
+    def _aplicar_layout_columnas(self) -> None:
+        """Reconstruye el header y ajusta el ancho de la tabla al layout actual."""
+        if getattr(self, "_table_inner", None) is None:
+            return
+        cols = self._cols_actuales()
+        total_w = sum(w for _, w, _ in cols) + self._ACCIONES_W
+        self._table_inner.width = total_w
+        self._table_inner.content.controls[0] = self._build_header_table()
+
     def build(self) -> ft.Control:
-        total_w = sum(w for _, w in self._COLS) + self._ACCIONES_W
+        total_w = sum(w for _, w, _ in self._cols_actuales()) + self._ACCIONES_W
 
         # Tabla con scroll horizontal sincronizado: ambos (header y filas) viven dentro
         # de un mismo Column con ancho fijo, envuelto por un Row con scroll horizontal.
@@ -180,6 +243,7 @@ class FacturasView(View):
                     expand=True, spacing=2, tight=True,
                     controls=[self._header_text, self._counter_text],
                 ),
+                self._btn_nuevo_cli,
                 self._btn_destinatarios_cli,
                 self._btn_importar,
                 self._btn_excel,
@@ -356,6 +420,7 @@ class FacturasView(View):
         self._sel_filial = filial
         self._sel_proveedor = proveedor
         self._sel_cliente = cliente
+        self._aplicar_layout_columnas()
         self._render_tree()
         self._render_tabla()
         self._actualizar_botones_seleccion()
@@ -366,14 +431,16 @@ class FacturasView(View):
 
     def _actualizar_botones_seleccion(self) -> None:
         cliente_sel = self._sel_cliente is not None
+        proveedor_sel = self._sel_proveedor is not None
         self._btn_importar.disabled = not cliente_sel
         self._btn_destinatarios_cli.disabled = not cliente_sel
+        self._btn_nuevo_cli.disabled = not proveedor_sel
 
     # ---------- Tabla ----------
 
     def _build_header_table(self) -> ft.Control:
         cells: list[ft.Control] = []
-        for label, w in self._COLS:
+        for label, w, _getter in self._cols_actuales():
             cells.append(ft.Container(
                 width=w,
                 padding=ft.padding.symmetric(horizontal=8, vertical=10),
@@ -433,27 +500,15 @@ class FacturasView(View):
     def _build_row(self, item: FacturasResponseDTO) -> ft.Control:
         can_edit = self.can(PERM_FACTURAS_EDIT)
 
-        valores = [
-            (str(item.id_factura), 50),
-            (_fmt_date(item.fecha_corte), 95),
-            (item.mes or "—", 80),
-            (str(item.anio) if item.anio else "—", 60),
-            (item.cuenta or "—", 110),
-            (item.linea or "—", 100),
-            (_fmt_monto(item.monto), 95),
-            (_fmt_date(item.fecha_limite_pago), 95),
-            (item.convenio or "—", 90),
-            (item.referencia_pago or "—", 110),
-            (_fmt_dt(item.fecha_descarga), 130),
-            (item.destinatarios or "—", 200),
-            (item.estado.capitalize() if item.estado else "—", 90),
-        ]
-
+        cols = self._cols_actuales()
+        last_idx = len(cols) - 1
         cells: list[ft.Control] = []
-        for i, (valor, w) in enumerate(valores):
-            color = _color_estado(item.estado) if i == len(valores) - 1 else None
-            weight = ft.FontWeight.W_600 if i == len(valores) - 1 else None
-            tooltip = item.error_envio if i == len(valores) - 1 and item.error_envio else None
+        for i, (_label, w, getter) in enumerate(cols):
+            valor = getter(item)
+            es_estado = (i == last_idx)
+            color = _color_estado(item.estado) if es_estado else None
+            weight = ft.FontWeight.W_600 if es_estado else None
+            tooltip = item.error_envio if es_estado and item.error_envio else None
             cells.append(self._cell(valor, width=w, color=color, weight=weight, tooltip=tooltip))
 
         actions = ft.Row(
@@ -508,10 +563,13 @@ class FacturasView(View):
         if not cliente:
             self._snackbar("Selecciona un cliente del árbol primero.", error=True)
             return
+        proveedor = self._ctrl.get_proveedor(self._sel_proveedor) if self._sel_proveedor else None
+        modo = "folder" if proveedor and proveedor.nombre.strip().lower() == "alestra" else "zip"
         self._import_modal = FacturasImportModal(
             page=self.page,
             cliente_nombre=f"{cliente.filial_nombre} / {cliente.proveedor_nombre} / {cliente.nombre}",
-            on_import=self._procesar_zip,
+            mode=modo,
+            on_import=self._procesar_import,
             on_cancel=self._cerrar_import,
             compute_destino=lambda m, a: self._ctrl.compute_destino(
                 self._sel_proveedor, self._sel_cliente, m, a
@@ -527,7 +585,7 @@ class FacturasView(View):
                 pass
         self._import_modal = None
 
-    def _procesar_zip(self, zip_path: Path, mes_idx: int, anio: int) -> None:
+    def _procesar_import(self, path: Path, mes_idx: int, anio: int) -> None:
         if self._sel_cliente is None or self._sel_proveedor is None:
             self._cerrar_import()
             self._snackbar("Selecciona cliente del árbol.", error=True)
@@ -535,19 +593,27 @@ class FacturasView(View):
         self._cerrar_import()
         self._set_progress(True)
         usuario = self._get_username()
+        es_carpeta = path.is_dir()
 
         async def _do() -> None:
             try:
-                ok, msg, resultado = await asyncio.to_thread(
-                    self._ctrl.importar_zip,
-                    zip_path, self._sel_proveedor, self._sel_cliente,
-                    mes_idx, anio, usuario,
-                )
+                if es_carpeta:
+                    ok, msg, resultado = await asyncio.to_thread(
+                        self._ctrl.importar_carpeta,
+                        path, self._sel_proveedor, self._sel_cliente,
+                        mes_idx, anio, usuario,
+                    )
+                else:
+                    ok, msg, resultado = await asyncio.to_thread(
+                        self._ctrl.importar_zip,
+                        path, self._sel_proveedor, self._sel_cliente,
+                        mes_idx, anio, usuario,
+                    )
                 self._snackbar(f"{'✓' if ok else '✗'} {msg}", error=not ok)
-                if resultado and any(not f.ok for f in resultado.importadas):
+                if resultado and any(not f.ok and not f.skipped for f in resultado.importadas):
                     detalle = "\n".join(
                         f"• {f.pdf_path.name if f.pdf_path else '?'}: {f.error}"
-                        for f in resultado.importadas if not f.ok
+                        for f in resultado.importadas if not f.ok and not f.skipped
                     )
                     self._mostrar_detalle("Detalle de errores", detalle)
                 if ok:
@@ -608,6 +674,48 @@ class FacturasView(View):
             on_cancel=self._cerrar_destinatarios,
         )
         self.page.show_dialog(self._destinatarios_modal.dialog)
+
+    def _nuevo_cliente(self) -> None:
+        if self._sel_proveedor is None:
+            self._snackbar("Selecciona un proveedor en el árbol.", error=True)
+            return
+        proveedor = self._ctrl.get_proveedor(self._sel_proveedor)
+        if not proveedor:
+            self._snackbar("Proveedor no encontrado.", error=True)
+            return
+
+        tf_nombre = ft.TextField(label="Nombre del cliente", autofocus=True, width=380)
+
+        def cerrar() -> None:
+            dlg.open = False
+            self._safe_update()
+
+        def confirmar(_: ft.ControlEvent) -> None:
+            nombre = (tf_nombre.value or "").strip()
+            if not nombre:
+                tf_nombre.error_text = "Ingresa un nombre."
+                self._safe_update()
+                return
+            cerrar()
+            ok, msg = self._ctrl.crear_cliente(self._sel_proveedor, nombre)
+            self._snackbar(f"{'✓' if ok else '✗'} {msg or 'Cliente creado.'}", error=not ok)
+            if ok:
+                self._cargar_todo()
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text(f"Nuevo cliente — {proveedor.filial_nombre} / {proveedor.nombre}"),
+            content=ft.Container(width=400, content=tf_nombre),
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda _: cerrar()),
+                ft.FilledButton("Crear", icon=ft.Icons.CHECK, on_click=confirmar),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        if dlg not in self.page.overlay:
+            self.page.overlay.append(dlg)
+        dlg.open = True
+        self._safe_update()
 
     def _configurar_cliente(self) -> None:
         cliente = next(

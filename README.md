@@ -56,6 +56,7 @@ gestionti/
 │   ├── services/            # Servicios de negocio
 │   └── views/               # Vistas de la interfaz
 ├── migrations/              # Scripts SQL de migración
+├── scripts/                 # Utilidades de diagnóstico (PDFs, etc.)
 ├── main.py                  # Punto de entrada
 ├── requirements.txt         # Dependencias
 └── .env.example             # Plantilla de variables de entorno
@@ -119,6 +120,49 @@ RE_[num_razon]_Semanal_[año]_[semana]_[num_empleado]_[extra].xml
 
 Las credenciales de Graph API (Client Secret) se cifran con **Windows DPAPI** antes de almacenarse en `%APPDATA%\GestionTI\config.json`. Solo el usuario de Windows que las guardó puede descifrarlas.
 
+## Módulo de Facturas
+
+Importa y administra facturas de servicios (Telcel, Alestra) desde archivos ZIP o carpetas con PDFs/XMLs. Extrae automáticamente los campos clave del PDF, mueve los archivos a una ruta estructurada por año/mes y registra cada factura en BD.
+
+### Proveedores soportados
+
+| Proveedor | Campos extraídos del PDF | Numeración interna |
+|-----------|-------------------------|-------------------|
+| **Telcel** | No. de Cuenta, Teléfono (línea), Fecha de Corte, Total, Fecha límite, Convenio BBVA, Referencia BBVA | `numero_factura = LC-{cuenta}` |
+| **Alestra** | No. de factura, Número de cliente, Número de cuenta, Fecha de expedición, Fecha límite de pago, Saldo a pagar | `numero_factura = FAB...` (extraído del PDF) |
+
+La extracción se hace con `pdfplumber` aplicando estrategias en cascada (tabular por posición de columna → regex inline → búsqueda línea-por-línea), lo que tolera las distintas formas en que pdfplumber serializa cada PDF.
+
+### Flujo de importación
+
+1. En el árbol seleccionar **Filial → Proveedor → Cliente**.
+2. Botón **Importar** → elegir un ZIP (o carpeta con PDFs/XMLs) y el mes/año.
+3. Cada PDF se parsea, se renombra como `FACTURA_{cuenta}.pdf` (en el caso del ZIP) y se guarda en `[ruta_descarga]\{año}\{mes}`. Si hay XML pareado se renombra a `CFDI_{cuenta}.xml`.
+4. Al final aparece un resumen tipo *"X importadas · Y complementos archivados · Z con error"*.
+
+### Complementos de pago (solo Alestra)
+
+Los archivos cuyo nombre empieza con `CP` (ej. `CPRBM1169478.pdf`) se reconocen como **complementos de pago** y se archivan en la misma carpeta destino sin extraer campos ni crear registro en BD. Su XML pareado por nombre exacto también se mueve junto al PDF.
+
+### Layout de columnas según proveedor
+
+La tabla muestra columnas distintas según el proveedor en scope:
+
+- **Telcel**: ID · Fecha Corte · Mes · Año · **Cuenta · Línea** · Total · F. Límite · **Convenio · Referencia** · Descarga · Destinatarios · Estatus
+- **Alestra**: ID · Fecha Corte · Mes · Año · **No. de factura · Número de cliente · Número de cuenta** · Total · F. Límite · Descarga · Destinatarios · Estatus
+
+Sin proveedor seleccionado (raíz / filial / "Todas las facturas") se aplica el layout de Telcel por defecto.
+
+### Diagnóstico de extracción
+
+Si un PDF no extrae los campos esperados, el script `scripts/diagnose_factura_pdf.py` imprime el texto crudo que `pdfplumber` produce para ese archivo:
+
+```bash
+python scripts\diagnose_factura_pdf.py "C:\ruta\al\factura.pdf"
+```
+
+Útil para ver el orden real (tabular vs. label-then-value) y ajustar regex/estrategias del extractor sin tocar otros proveedores.
+
 ## Dependencias Principales
 
 | Paquete | Uso |
@@ -127,6 +171,8 @@ Las credenciales de Graph API (Client Secret) se cifran con **Windows DPAPI** an
 | `pyodbc` | Conexión a SQL Server |
 | `msal` | Autenticación OAuth2 con Microsoft Graph API |
 | `requests` | Envío de correos vía Graph API |
+| `pdfplumber` | Extracción de campos desde PDFs de facturas |
+| `openpyxl` | Lectura/escritura de archivos Excel |
 | `python-dotenv` | Variables de entorno en desarrollo |
 
 ## Troubleshooting
@@ -138,3 +184,7 @@ Las credenciales de Graph API (Client Secret) se cifran con **Windows DPAPI** an
 **`ErrorAccessDenied` (403) al enviar nómina** — El permiso `Mail.Send` no tiene admin consent en el tenant. Ir a Entra ID → App registrations → API permissions → Grant admin consent.
 
 **`ErrorInvalidUser` (404) al enviar nómina** — El correo remitente no existe o no tiene licencia en el tenant configurado.
+
+**`No se pudo extraer 'No. de Cuenta'` al importar factura** — El PDF tiene un layout distinto al esperado. Correr `python scripts\diagnose_factura_pdf.py "ruta\al\pdf"` para ver el texto crudo y compartirlo, así se ajustan los patrones del extractor del proveedor afectado.
+
+**`pdfplumber no está instalado`** — Falta la dependencia. Ejecutar `pip install -r requirements.txt` (incluye `pdfplumber`).
