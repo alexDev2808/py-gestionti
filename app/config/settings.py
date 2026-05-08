@@ -30,6 +30,13 @@ _NOMINA_KEY = "NOMINA_CREDENTIALS"
 _NOMINA_PLANTILLA_KEY = "NOMINA_PLANTILLA"
 _BACKUP_FOLDER_KEY = "BACKUP_FOLDER"
 _FACTURAS_FOLDER_KEY = "FACTURAS_EXCEL_FOLDER"
+_RAZONES_SOCIALES_PDF_KEY = "RAZONES_SOCIALES_PDF"
+
+_DEFAULT_RAZONES_SOCIALES_PDF: list[dict] = [
+    {"nombre": "Manufacturas Bancor", "abrev": "MBCR"},
+    {"nombre": "LOGYM",               "abrev": "LGM"},
+    {"nombre": "AMAGEDON",            "abrev": "AMG"},
+]
 
 _DEFAULT_PLANTILLA: dict = {
     "subject": "CFDI Nómina Semana {num_semana} - {num_empleado} {nombre_empleado}",
@@ -93,6 +100,8 @@ class Settings:
     BACKUP_FOLDER: str = _file_cfg.get(_BACKUP_FOLDER_KEY, "C:\\GestionTI\\Backups")
     # Carpeta de destino para los Excel de facturas
     FACTURAS_EXCEL_FOLDER: str = _file_cfg.get(_FACTURAS_FOLDER_KEY, "C:\\GestionTI\\Facturas")
+    # Razones sociales para la utilidad "Separar PDF": [{"nombre": ..., "abrev": ...}]
+    RAZONES_SOCIALES_PDF: list = _file_cfg.get(_RAZONES_SOCIALES_PDF_KEY, list(_DEFAULT_RAZONES_SOCIALES_PDF))
 
     @property
     def is_first_run(self) -> bool:
@@ -142,6 +151,27 @@ class Settings:
         self.FACTURAS_EXCEL_FOLDER = path
         self.save()
 
+    def get_razones_sociales_pdf(self) -> list[dict]:
+        """Lista [{"nombre": ..., "abrev": ...}] para la utilidad Separar PDF."""
+        if isinstance(self.RAZONES_SOCIALES_PDF, list) and self.RAZONES_SOCIALES_PDF:
+            return [
+                {"nombre": str(r.get("nombre", "")).strip(),
+                 "abrev":  str(r.get("abrev",  "")).strip()}
+                for r in self.RAZONES_SOCIALES_PDF
+                if isinstance(r, dict)
+            ]
+        return [dict(r) for r in _DEFAULT_RAZONES_SOCIALES_PDF]
+
+    def set_razones_sociales_pdf(self, razones: list[dict]) -> None:
+        limpia = [
+            {"nombre": str(r.get("nombre", "")).strip(),
+             "abrev":  str(r.get("abrev",  "")).strip()}
+            for r in (razones or [])
+            if isinstance(r, dict) and str(r.get("nombre", "")).strip()
+        ]
+        self.RAZONES_SOCIALES_PDF = limpia
+        self.save()
+
     def set_nomina_credentials(self, id_area: int, tenant_id: str, client_id: str, client_secret: str) -> None:
         """Guarda las credenciales Graph API de un área cifrando el secreto con DPAPI."""
         from app.services.crypto_service import encrypt, is_encrypted
@@ -181,6 +211,7 @@ class Settings:
         data[_NOMINA_PLANTILLA_KEY] = self.NOMINA_PLANTILLA if isinstance(self.NOMINA_PLANTILLA, dict) else {}
         data[_BACKUP_FOLDER_KEY] = self.BACKUP_FOLDER or "C:\\GestionTI\\Backups"
         data[_FACTURAS_FOLDER_KEY] = self.FACTURAS_EXCEL_FOLDER or "C:\\GestionTI\\Facturas"
+        data[_RAZONES_SOCIALES_PDF_KEY] = self.RAZONES_SOCIALES_PDF if isinstance(self.RAZONES_SOCIALES_PDF, list) else []
 
         _CONFIG_FILE.write_text(
             json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"

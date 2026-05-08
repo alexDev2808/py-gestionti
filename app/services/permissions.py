@@ -58,6 +58,7 @@ PERM_NOMINA_HISTORIAL_VIEW  = "nomina.historial.view"
 PERM_BACKUP_MANAGE          = "backup.manage"
 PERM_FACTURAS_VIEW          = "facturas.view"
 PERM_FACTURAS_EDIT          = "facturas.edit"
+PERM_UTILIDADES_VIEW        = "utilidades.view"
 
 
 # ---------- Etiquetas legibles para la UI de gestión de permisos ----------
@@ -87,6 +88,7 @@ PERM_LABELS: dict[str, str] = {
     PERM_PROVEEDORES_EDIT:       "Proveedores — Editar",
     PERM_FACTURAS_VIEW:          "Facturas — Ver",
     PERM_FACTURAS_EDIT:          "Facturas — Editar",
+    PERM_UTILIDADES_VIEW:        "Utilidades — Ver",
 }
 
 # Permisos asignables a un Gerente (excluye permisos de sistema)
@@ -131,6 +133,7 @@ ROLE_PERMISSIONS: dict[Role, FrozenSet[str]] = {
         PERM_PROVEEDORES_EDIT,
         PERM_FACTURAS_VIEW,
         PERM_FACTURAS_EDIT,
+        PERM_UTILIDADES_VIEW,
         PERM_SETTINGS_MANAGE,
         PERM_ROLES_MANAGE,
         PERM_NOMINA_SEND,

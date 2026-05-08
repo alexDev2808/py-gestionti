@@ -29,6 +29,7 @@ from app.services.permissions import (
     PERM_NOMINA_HISTORIAL_VIEW,
     PERM_BACKUP_MANAGE,
     PERM_FACTURAS_VIEW,
+    PERM_UTILIDADES_VIEW,
 )
 from app.views.areas_view import AreasView
 from app.views.departamentos_view import DepartamentosView
@@ -44,6 +45,7 @@ from app.views.tipo_puestos_view import TipoPuestosView
 from app.views.roles_proveedores_view import RolesProveedoresView
 from app.views.proveedores_view import ProveedoresView
 from app.views.facturas_view import FacturasView
+from app.views.separar_pdf_view import SepararPdfView
 from app.views.profile_view import ProfileView
 from app.views.about_view import AboutView
 from app.views.backup_view import BackupView
@@ -375,6 +377,12 @@ def main(page: ft.Page):
             required_permission=PERM_FACTURAS_VIEW,
         )
         registry.register(
+            SepararPdfView,
+            icon=ft.Icons.PICTURE_AS_PDF_OUTLINED,
+            selected_icon=ft.Icons.PICTURE_AS_PDF,
+            required_permission=PERM_UTILIDADES_VIEW,
+        )
+        registry.register(
             RolesView,
             icon=ft.Icons.ADMIN_PANEL_SETTINGS_OUTLINED,
             selected_icon=ft.Icons.ADMIN_PANEL_SETTINGS,
@@ -467,10 +475,12 @@ def main(page: ft.Page):
         # ProfileView se accede por el botón "Perfil" del footer, no como ítem de nav.
         _group_keys = {RolesProveedoresView.key, ProveedoresView.key}
         _nomina_keys = {NominaEnvioView.key, NominaHistorialView.key}
+        _utilidades_keys = {SepararPdfView.key}
         _hidden_keys = {ProfileView.key}
         _regular_items = []
         _alertas_items = []
         _nomina_items = []
+        _utilidades_items = []
         for _entry in visible_entries:
             if _entry.key in _hidden_keys:
                 continue
@@ -479,6 +489,8 @@ def main(page: ft.Page):
                 _alertas_items.append(_item)
             elif _entry.key in _nomina_keys:
                 _nomina_items.append(_item)
+            elif _entry.key in _utilidades_keys:
+                _utilidades_items.append(_item)
             else:
                 _regular_items.append(_item)
         _menu_items = list(_regular_items)
@@ -486,6 +498,8 @@ def main(page: ft.Page):
             _menu_items.append(MenuGroup(label="Alertas de calidad", icon=ft.Icons.WARNING_AMBER_OUTLINED, items=_alertas_items))
         if _nomina_items:
             _menu_items.append(MenuGroup(label="Nómina", icon=ft.Icons.RECEIPT_LONG_OUTLINED, items=_nomina_items))
+        if _utilidades_items:
+            _menu_items.append(MenuGroup(label="Utilidades", icon=ft.Icons.BUILD_OUTLINED, items=_utilidades_items))
 
         side_menu = SideMenu(
             items=_menu_items,
