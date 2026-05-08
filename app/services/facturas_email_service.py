@@ -71,8 +71,8 @@ def construir_tabla_html(
     total: Optional[float],
     fecha_limite: Optional[str],
 ) -> str:
-    """Construye la tabla HTML estilizada con los datos de la factura.
-    Reproduce el formato del correo de referencia (Rubik Light 14pt, bordes 1pt)."""
+    """Tabla HTML para facturas Telcel.
+    MES · Convenio · Referencia · Factura · Línea · Total a pagar · Fecha límite de pago."""
     headers = ["MES", "Convenio", "Referencia", "Factura", "Línea",
                "Total a pagar", "Fecha límite de pago"]
     total_txt = f"$ {total:,.2f}" if total is not None else "—"
@@ -83,6 +83,36 @@ def construir_tabla_html(
         _td(referencia or "—"),
         _td(numero_factura or "—"),
         _td(linea or "—"),
+        _td(total_txt),
+        _td(fecha_limite or "—", align="right"),
+    ])
+    return (
+        f'<table cellspacing="0" cellpadding="0" style="{_TABLE_STYLE}">'
+        f'<thead><tr>{th_cells}</tr></thead>'
+        f'<tbody><tr>{td_cells}</tr></tbody>'
+        f'</table>'
+    )
+
+
+def construir_tabla_html_alestra(
+    mes: str,
+    numero_factura: str,
+    numero_cliente: str,
+    numero_cuenta: str,
+    total: Optional[float],
+    fecha_limite: Optional[str],
+) -> str:
+    """Tabla HTML para facturas Alestra.
+    MES · Factura · Número de cliente · Número de cuenta · Total a pagar · Fecha límite de pago."""
+    headers = ["MES", "Factura", "Número de cliente", "Número de cuenta",
+               "Total a pagar", "Fecha límite de pago"]
+    total_txt = f"$ {total:,.2f}" if total is not None else "—"
+    th_cells = "".join(f'<th style="{_TH_STYLE}">{_esc(h)}</th>' for h in headers)
+    td_cells = "".join([
+        _td(mes or "—"),
+        _td(numero_factura or "—"),
+        _td(numero_cliente or "—"),
+        _td(numero_cuenta or "—"),
         _td(total_txt),
         _td(fecha_limite or "—", align="right"),
     ])
@@ -136,10 +166,24 @@ class FacturasEmailService:
         '{firma}'
     )
 
+    PLANTILLA_ASUNTO_DEFAULT_ALESTRA = "Factura Alestra — {cliente} — {mes} {anio}"
+    PLANTILLA_CUERPO_DEFAULT_ALESTRA = (
+        '<p style="font-family:\'Rubik Light\',Arial,sans-serif;font-size:11pt;">'
+        'Hola, te comparto la factura y complemento de pago de Alestra correspondiente.'
+        '</p>'
+        '{tabla_factura}'
+        '<p style="font-family:\'Rubik Light\',Arial,sans-serif;font-size:11pt;">'
+        'Quedo al pendiente.</p>'
+        '<p style="font-family:\'Rubik Light\',Arial,sans-serif;font-size:11pt;">'
+        'Saludos,</p>'
+        '{firma}'
+    )
+
     PLACEHOLDERS = [
         "cliente", "cuenta", "linea", "mes", "anio",
         "total", "fecha_corte", "fecha_limite", "convenio", "referencia",
-        "numero_factura", "tabla_factura", "firma",
+        "numero_factura", "numero_cliente", "numero_cuenta",
+        "tabla_factura", "firma",
     ]
 
     def enviar(
@@ -253,6 +297,77 @@ class FacturasEmailService:
         cuerpo_html = self._aplicar(cuerpo_html, ctx)
 
         # Fallbacks si el usuario olvidó incluir los placeholders
+        if "{tabla_factura}" not in cuerpo_tpl and tabla not in cuerpo_html:
+            cuerpo_html += tabla
+        if "{firma}" not in cuerpo_tpl and FIRMA_DEFAULT not in cuerpo_html:
+            cuerpo_html += FIRMA_DEFAULT
+
+        return asunto, cuerpo_html
+
+    def construir_mensaje_alestra(
+        self,
+        cliente: str,
+        numero_factura: str,
+        numero_cliente: str,
+        numero_cuenta: str,
+        mes: str,
+        anio: int,
+        total: Optional[float],
+        fecha_limite: Optional[str],
+        plantilla_asunto: str = "",
+        plantilla_cuerpo: str = "",
+    ) -> tuple[str, str]:
+        """
+        Genera (asunto, cuerpoHTML) para una factura Alestra.
+
+        La tabla del cuerpo lleva: MES, Factura, Número de cliente,
+        Número de cuenta, Total a pagar, Fecha límite de pago.
+
+        Placeholders disponibles en la plantilla del cliente:
+            {cliente} {mes} {anio} {total} {fecha_limite}
+            {numero_factura} {numero_cliente} {numero_cuenta}
+            {linea} (alias de numero_cliente) {cuenta} (alias de numero_cuenta)
+            {tabla_factura} {firma}
+        """
+        tabla = construir_tabla_html_alestra(
+            mes=mes,
+            numero_factura=numero_factura,
+            numero_cliente=numero_cliente,
+            numero_cuenta=numero_cuenta,
+            total=total,
+            fecha_limite=fecha_limite,
+        )
+        ctx = {
+            "cliente": cliente or "",
+            "numero_factura": numero_factura or "—",
+            "numero_cliente": numero_cliente or "—",
+            "numero_cuenta": numero_cuenta or "—",
+            # Aliases para que plantillas hechas con esquema Telcel también
+            # funcionen: en Alestra `linea` = número de cliente, `cuenta` =
+            # número de cuenta.
+            "linea": numero_cliente or "—",
+            "cuenta": numero_cuenta or "—",
+            "mes": mes or "",
+            "anio": str(anio) if anio else "",
+            "total": f"${total:,.2f} MN" if total is not None else "—",
+            "fecha_limite": fecha_limite or "—",
+            "fecha_corte": "—",
+            "convenio": "—",
+            "referencia": "—",
+            "tabla_factura": tabla,
+            "firma": FIRMA_DEFAULT,
+        }
+        asunto_tpl = (plantilla_asunto or self.PLANTILLA_ASUNTO_DEFAULT_ALESTRA).strip()
+        cuerpo_tpl = plantilla_cuerpo or self.PLANTILLA_CUERPO_DEFAULT_ALESTRA
+
+        asunto_ctx = {k: v for k, v in ctx.items() if k not in ("tabla_factura", "firma")}
+        asunto = self._aplicar(asunto_tpl, asunto_ctx)
+
+        cuerpo_html = cuerpo_tpl
+        if "<" not in cuerpo_html and ">" not in cuerpo_html:
+            cuerpo_html = "<p>" + cuerpo_html.replace("\n\n", "</p><p>").replace("\n", "<br>") + "</p>"
+        cuerpo_html = self._aplicar(cuerpo_html, ctx)
+
         if "{tabla_factura}" not in cuerpo_tpl and tabla not in cuerpo_html:
             cuerpo_html += tabla
         if "{firma}" not in cuerpo_tpl and FIRMA_DEFAULT not in cuerpo_html:

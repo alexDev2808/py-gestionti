@@ -265,11 +265,27 @@ class FacturasController:
             self.facturas.marcar_error(item.id_factura, "Sin destinatarios configurados.")
             return False, "Sin destinatarios configurados. Configura los correos del cliente."
 
+        es_alestra = (item.proveedor_nombre or "").strip().lower() == "alestra"
+
         adjuntos: list[Path] = []
         if item.ruta_pdf:
             adjuntos.append(Path(item.ruta_pdf))
         if item.ruta_xml:
             adjuntos.append(Path(item.ruta_xml))
+
+        # Alestra: adjuntar también el/los complemento(s) de pago (archivos
+        # `CP*.pdf` / `CP*.xml`) que estén en la misma carpeta destino que la
+        # factura. Los CP se archivan ahí durante el import sin pasar por la BD.
+        if es_alestra and item.ruta_pdf:
+            carpeta = Path(item.ruta_pdf).parent
+            if carpeta.exists():
+                for cp in sorted(carpeta.glob("CP*.pdf")):
+                    if cp not in adjuntos:
+                        adjuntos.append(cp)
+                for cp in sorted(carpeta.glob("CP*.xml")):
+                    if cp not in adjuntos:
+                        adjuntos.append(cp)
+
         if not adjuntos:
             return False, "La factura no tiene archivos adjuntos."
 
@@ -281,21 +297,36 @@ class FacturasController:
         )
         plantilla_asunto = cliente.email_asunto if cliente else ""
         plantilla_cuerpo = cliente.email_cuerpo if cliente else ""
-        asunto, cuerpo = self.email.construir_mensaje_telcel(
-            cliente=item.cliente_nombre or "",
-            cuenta=item.cuenta or "",
-            linea=item.linea or "",
-            mes=item.mes or "",
-            anio=item.anio or 0,
-            total=item.monto,
-            fecha_limite=fecha_limite_str,
-            convenio=item.convenio or "",
-            referencia=item.referencia_pago or "",
-            fecha_corte=fecha_corte_str,
-            numero_factura=item.numero_factura or "",
-            plantilla_asunto=plantilla_asunto,
-            plantilla_cuerpo=plantilla_cuerpo,
-        )
+
+        if es_alestra:
+            asunto, cuerpo = self.email.construir_mensaje_alestra(
+                cliente=item.cliente_nombre or "",
+                numero_factura=item.numero_factura or "",
+                numero_cliente=item.linea or "",
+                numero_cuenta=item.cuenta or "",
+                mes=item.mes or "",
+                anio=item.anio or 0,
+                total=item.monto,
+                fecha_limite=fecha_limite_str,
+                plantilla_asunto=plantilla_asunto,
+                plantilla_cuerpo=plantilla_cuerpo,
+            )
+        else:
+            asunto, cuerpo = self.email.construir_mensaje_telcel(
+                cliente=item.cliente_nombre or "",
+                cuenta=item.cuenta or "",
+                linea=item.linea or "",
+                mes=item.mes or "",
+                anio=item.anio or 0,
+                total=item.monto,
+                fecha_limite=fecha_limite_str,
+                convenio=item.convenio or "",
+                referencia=item.referencia_pago or "",
+                fecha_corte=fecha_corte_str,
+                numero_factura=item.numero_factura or "",
+                plantilla_asunto=plantilla_asunto,
+                plantilla_cuerpo=plantilla_cuerpo,
+            )
 
         resultado = self.email.enviar(destinos, asunto, cuerpo, adjuntos)
         if resultado.ok:
