@@ -67,6 +67,16 @@ class MainLayout(ft.Container):
             on_click=lambda _: self.on_back() if self.on_back else None,
         )
 
+        # Sidebar abierto por defecto; se alterna con el botón hamburguesa.
+        self._side_visible = True
+        self._side_container: Optional[ft.Container] = None
+        self._hamburger_button = ft.IconButton(
+            icon=ft.Icons.MENU,
+            tooltip="Ocultar menú",
+            visible=self.navigation is not None,
+            on_click=lambda _: self.toggle_side_menu(),
+        )
+
         # AnimatedSwitcher contiene el contenido dinámico con animación entre vistas.
         self._switcher = ft.AnimatedSwitcher(
             content=self._wrap_content(content),
@@ -120,7 +130,13 @@ class MainLayout(ft.Container):
         """
         children: list[ft.Control] = []
         if self.navigation is not None:
-            children.append(self._build_side_menu())
+            self._side_container = self._build_side_menu()
+            self._side_container.visible = self._side_visible
+            children.append(self._side_container)
+        else:
+            self._side_container = None
+        self._hamburger_button.visible = self.navigation is not None
+        self._sync_hamburger_tooltip()
         children.append(self._build_main_area())
 
         return ft.Row(
@@ -129,12 +145,12 @@ class MainLayout(ft.Container):
             controls=children,
         )
 
-    def _build_side_menu(self) -> ft.Control:
+    def _build_side_menu(self) -> ft.Container:
         """
         Construye el panel lateral con el control de navegación.
 
         Retorna:
-            ft.Control: Contenedor con ancho fijo que aloja el menú lateral.
+            ft.Container: Contenedor con ancho fijo que aloja el menú lateral.
         """
         return ft.Container(
             width=280,
@@ -143,6 +159,18 @@ class MainLayout(ft.Container):
             border=ft.border.only(right=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
             content=self.navigation,
         )
+
+    def toggle_side_menu(self) -> None:
+        """Alterna la visibilidad del sidebar."""
+        self._side_visible = not self._side_visible
+        if self._side_container is not None:
+            self._side_container.visible = self._side_visible
+        self._sync_hamburger_tooltip()
+        if self.page:
+            self.update()
+
+    def _sync_hamburger_tooltip(self) -> None:
+        self._hamburger_button.tooltip = "Ocultar menú" if self._side_visible else "Mostrar menú"
 
     def _wrap_content(self, content: ft.Control) -> ft.Control:
         """
@@ -225,6 +253,7 @@ class MainLayout(ft.Container):
                         spacing=8,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         controls=[
+                            self._hamburger_button,
                             self._back_button,
                             ft.Column(
                                 spacing=2,

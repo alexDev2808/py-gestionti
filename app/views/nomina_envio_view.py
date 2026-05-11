@@ -483,24 +483,15 @@ class NominaEnvioView(View):
     # ------------------------------------------------------------------ #
 
     def _on_buscar_change(self, e: ft.ControlEvent) -> None:
-        query = (self._tf_buscar.value or "").lower().strip()
-        filtrados = (
-            self._items if not query else [
-                i for i in self._items
-                if query in i.num_empleado.lower()
-                or query in i.nombre_empleado.lower()
-                or query in i.correo.lower()
-            ]
-        )
-        self._rows_container.controls = [self._build_row(i) for i in filtrados]
-        self._safe_update()
+        self._refrescar_lista()
 
     # ------------------------------------------------------------------ #
     # Construcción de tabla                                                #
     # ------------------------------------------------------------------ #
 
-    _COLUMNS = ["# Empl.", "Nombre", "Correo", "PDF", "XML"]
+    _COLUMNS = ["# Empl.", "Nombre", "Correo", "PDF", "XML", "Acciones"]
     _EMPL_COL_WIDTH = 80
+    _ACCIONES_COL_WIDTH = 180
 
     def _build_table_header(self) -> ft.Control:
         def _hcell(text: str, width: int = None) -> ft.Container:
@@ -511,7 +502,11 @@ class NominaEnvioView(View):
                 content=ft.Text(text, size=12, weight=ft.FontWeight.W_600,
                                 color=ft.Colors.ON_SURFACE_VARIANT),
             )
-        cells = [_hcell(self._COLUMNS[0], self._EMPL_COL_WIDTH)] + [_hcell(h) for h in self._COLUMNS[1:]]
+        cells = (
+            [_hcell(self._COLUMNS[0], self._EMPL_COL_WIDTH)]
+            + [_hcell(h) for h in self._COLUMNS[1:-1]]
+            + [_hcell(self._COLUMNS[-1], self._ACCIONES_COL_WIDTH)]
+        )
         return ft.Container(
             bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
             content=ft.Row(spacing=0, controls=cells),
@@ -527,10 +522,47 @@ class NominaEnvioView(View):
             ),
             self._cell(item.pdf_nombre, small=True),
             self._cell(item.xml_nombre or "—", small=True),
+            self._build_acciones_cell(item),
         ]
         return ft.Container(
-            content=ft.Row(spacing=0, controls=cells),
+            content=ft.Row(spacing=0, controls=cells, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
+        )
+
+    def _build_acciones_cell(self, item: NominaItem) -> ft.Container:
+        puede_reenviar = item.estado in ("listo", "sin_correo")
+        botones = [
+            ft.IconButton(
+                icon=ft.Icons.EDIT_OUTLINED,
+                tooltip="Editar correo",
+                icon_size=18,
+                on_click=lambda _e, it=item: self._editar_correo(it),
+            ),
+            ft.IconButton(
+                icon=ft.Icons.PICTURE_AS_PDF_OUTLINED,
+                tooltip="Ver PDF",
+                icon_size=18,
+                on_click=lambda _e, it=item: self._ver_pdf(it),
+            ),
+            ft.IconButton(
+                icon=ft.Icons.SEND_OUTLINED,
+                tooltip="Reintentar envío" if puede_reenviar else "No se puede enviar (falta XML o empleado)",
+                icon_size=18,
+                disabled=not puede_reenviar,
+                on_click=lambda _e, it=item: self._reenviar_item(it),
+            ),
+            ft.IconButton(
+                icon=ft.Icons.DELETE_OUTLINE,
+                tooltip="Quitar de la lista",
+                icon_size=18,
+                icon_color=ft.Colors.ERROR,
+                on_click=lambda _e, it=item: self._eliminar_item(it),
+            ),
+        ]
+        return ft.Container(
+            width=self._ACCIONES_COL_WIDTH,
+            padding=ft.padding.symmetric(horizontal=4, vertical=2),
+            content=ft.Row(spacing=0, controls=botones, alignment=ft.MainAxisAlignment.START),
         )
 
     def _cell(self, value: str, small: bool = False, color=None, width: int = None) -> ft.Container:
@@ -608,6 +640,156 @@ class NominaEnvioView(View):
                 pass
 
         threading.Thread(target=_send, daemon=True).start()
+
+    # ------------------------------------------------------------------ #
+    # Acciones por fila                                                    #
+    # ------------------------------------------------------------------ #
+
+    def _editar_correo(self, item: NominaItem) -> None:
+        tf = ft.TextField(
+            label="Correo",
+            value=item.correo or "",
+            autofocus=True,
+            hint_text="usuario@empresa.com",
+            width=380,
+        )
+        error_text = ft.Text("", color=ft.Colors.ERROR, size=12, visible=False)
+
+        def _cerrar() -> None:
+            try:
+                self.page.pop_dialog()
+            except Exception:
+                pass
+
+        def _guardar(_e: ft.ControlEvent) -> None:
+            nuevo = (tf.value or "").strip()
+
+            def _persistir() -> None:
+                ok, msg = self._ctrl.actualizar_correo_empleado(item.num_empleado, nuevo)
+                if not ok:
+                    error_text.value = msg
+                    error_text.visible = True
+                    self._safe_update()
+                    return
+                item.correo = nuevo
+                if item.estado == "sin_correo":
+                    item.estado = "listo" if item.xml_path else "sin_xml"
+                _cerrar()
+                self._refrescar_lista()
+                self._show_snackbar("Correo actualizado.")
+
+            threading.Thread(target=_persistir, daemon=True).start()
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Row(
+                spacing=8,
+                controls=[
+                    ft.Icon(ft.Icons.EMAIL_OUTLINED, color=ft.Colors.PRIMARY),
+                    ft.Text(f"Editar correo — {item.num_empleado}"),
+                ],
+            ),
+            content=ft.Container(
+                width=420,
+                content=ft.Column(
+                    spacing=10,
+                    tight=True,
+                    controls=[
+                        ft.Text(item.nombre_empleado, size=12,
+                                color=ft.Colors.ON_SURFACE_VARIANT),
+                        tf,
+                        error_text,
+                    ],
+                ),
+            ),
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda _e: _cerrar()),
+                ft.FilledButton("Guardar", on_click=_guardar),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self.page.show_dialog(dlg)
+
+    def _ver_pdf(self, item: NominaItem) -> None:
+        ruta = item.pdf_path
+        if not ruta or not Path(ruta).exists():
+            self._show_snackbar("El PDF no existe en disco.", error=True)
+            return
+        try:
+            import os
+            os.startfile(ruta)
+        except Exception as exc:
+            self._show_snackbar(f"No se pudo abrir el PDF: {exc}", error=True)
+
+    def _reenviar_item(self, item: NominaItem) -> None:
+        if self._enviando:
+            self._show_snackbar("Hay un envío en curso, espera a que termine.", error=True)
+            return
+        if item.estado not in ("listo", "sin_correo"):
+            self._show_snackbar("No hay archivos válidos para enviar.", error=True)
+            return
+        if not item.correo:
+            self._show_snackbar("El empleado no tiene correo. Edítalo primero.", error=True)
+            return
+        area = self._get_area_sel()
+        if not area:
+            return
+
+        self._enviando = True
+        self._progress_envio.visible = True
+        try:
+            label: ft.Text = self._progress_envio.controls[1]
+            label.value = f"Reenviando — {item.num_empleado}"
+        except Exception:
+            pass
+        self._safe_update()
+
+        def _send() -> None:
+            try:
+                ok, msg_err = self._ctrl.enviar_item(area, item)
+            except Exception as exc:
+                ok, msg_err = False, str(exc)
+
+            self._enviando = False
+            self._progress_envio.visible = False
+
+            if ok:
+                self._set_status(f"Reenvío correcto: {item.num_empleado}")
+            else:
+                self._set_status(f"Error al reenviar {item.num_empleado}: {msg_err}")
+                self._mostrar_error_detalle(msg_err)
+
+            self._safe_update()
+
+        threading.Thread(target=_send, daemon=True).start()
+
+    def _eliminar_item(self, item: NominaItem) -> None:
+        try:
+            self._items.remove(item)
+        except ValueError:
+            return
+        self._refrescar_lista()
+        listos = [i for i in self._items if i.estado == "listo"]
+        if listos:
+            self._btn_enviar.text = f"Enviar todos ({len(listos)})"
+            self._btn_enviar.visible = True
+        else:
+            self._btn_enviar.visible = False
+        self._safe_update()
+
+    def _refrescar_lista(self) -> None:
+        """Re-aplica el filtro del buscador y vuelve a renderizar las filas."""
+        query = (self._tf_buscar.value or "").lower().strip()
+        filtrados = (
+            self._items if not query else [
+                i for i in self._items
+                if query in i.num_empleado.lower()
+                or query in i.nombre_empleado.lower()
+                or query in i.correo.lower()
+            ]
+        )
+        self._rows_container.controls = [self._build_row(i) for i in filtrados]
+        self._safe_update()
 
     # ------------------------------------------------------------------ #
     # Utilidades                                                           #

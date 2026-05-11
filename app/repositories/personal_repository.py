@@ -380,6 +380,16 @@ class PersonalRepository:
             return None
         return personal
 
+    def update_mail(self, num_empleado: str, mail: str) -> bool:
+        """Actualiza únicamente el correo del empleado."""
+        query = "UPDATE Personal SET mail = ? WHERE id_empleado = ?"
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, (mail, num_empleado))
+            affected = cursor.rowcount
+            conn.commit()
+        return affected > 0
+
     def update_rol_app(self, num_empleado: str, rol_app: Optional[str]) -> bool:
         """Actualiza el rol de la app de gestión para el empleado indicado."""
         query = "UPDATE Personal SET rol_app = ? WHERE id_empleado = ?"

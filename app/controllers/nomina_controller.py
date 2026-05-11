@@ -139,6 +139,25 @@ class NominaController:
         return items
 
     # ------------------------------------------------------------------ #
+    # Edición de correo del empleado                                       #
+    # ------------------------------------------------------------------ #
+
+    def actualizar_correo_empleado(self, num_empleado: str, nuevo_correo: str) -> tuple[bool, str]:
+        """Actualiza el correo del empleado en la BD."""
+        correo = (nuevo_correo or "").strip()
+        if not correo:
+            return False, "El correo no puede estar vacío."
+        if "@" not in correo or "." not in correo.split("@")[-1]:
+            return False, "Formato de correo inválido."
+        try:
+            ok = self._personal_repo.update_mail(num_empleado, correo)
+            if not ok:
+                return False, "No se encontró el empleado."
+            return True, "Correo actualizado."
+        except Exception as exc:
+            return False, str(exc)
+
+    # ------------------------------------------------------------------ #
     # Envío                                                                #
     # ------------------------------------------------------------------ #
 
