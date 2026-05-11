@@ -47,6 +47,7 @@ class NominaController:
         tenant_id: str,
         client_id: str,
         client_secret: str,
+        firma_html: str = "",
     ) -> tuple[bool, str]:
         dto = AreasNominaConfigUpdateDTO(
             id_area=id_area,
@@ -62,10 +63,15 @@ class NominaController:
         if tenant_id or client_id or client_secret:
             settings.set_nomina_credentials(id_area, tenant_id.strip(), client_id.strip(), client_secret.strip())
 
+        settings.set_nomina_firma(id_area, firma_html or "")
+
         return True, "Configuración guardada."
 
     def get_credenciales(self, id_area: int) -> dict:
         return settings.get_nomina_credentials(id_area)
+
+    def get_firma_area(self, id_area: int) -> str:
+        return settings.get_nomina_firma(id_area)
 
     def get_plantilla(self) -> dict:
         return settings.get_nomina_plantilla()
@@ -192,6 +198,7 @@ class NominaController:
             fecha_inicio=fecha_inicio,
             fecha_fin=fecha_fin,
             plantilla=plantilla,
+            firma_html=settings.get_nomina_firma(area.id_area),
         )
 
         try:

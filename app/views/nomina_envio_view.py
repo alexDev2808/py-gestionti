@@ -248,10 +248,12 @@ class NominaEnvioView(View):
             self._show_snackbar("Selecciona una razón social primero.", error=True)
             return
         creds = self._ctrl.get_credenciales(area.id_area)
+        firma = self._ctrl.get_firma_area(area.id_area)
         self._modal = NominaConfigModal(
             page=self.page,
             area=area,
             credenciales=creds,
+            firma_html=firma,
             on_save=self._guardar_config,
             on_cancel=self._cerrar_modal,
         )
@@ -276,6 +278,7 @@ class NominaEnvioView(View):
                     values["tenant_id"],
                     values["client_id"],
                     values["client_secret"],
+                    values.get("firma_html", ""),
                 )
                 if ok:
                     self._show_snackbar("Configuración guardada.")

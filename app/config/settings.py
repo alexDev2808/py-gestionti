@@ -28,6 +28,7 @@ _DB_KEYS = [
 _META_KEYS = ["SETUP_DONE"]
 _NOMINA_KEY = "NOMINA_CREDENTIALS"
 _NOMINA_PLANTILLA_KEY = "NOMINA_PLANTILLA"
+_NOMINA_FIRMAS_KEY = "NOMINA_FIRMAS"
 _BACKUP_FOLDER_KEY = "BACKUP_FOLDER"
 _FACTURAS_FOLDER_KEY = "FACTURAS_EXCEL_FOLDER"
 _RAZONES_SOCIALES_PDF_KEY = "RAZONES_SOCIALES_PDF"
@@ -96,6 +97,8 @@ class Settings:
     NOMINA_CREDENTIALS: dict = _file_cfg.get(_NOMINA_KEY, {})
     # Plantilla del correo de nómina
     NOMINA_PLANTILLA: dict = _file_cfg.get(_NOMINA_PLANTILLA_KEY, {})
+    # Firmas HTML por área: {"id_area": "<html>"}
+    NOMINA_FIRMAS: dict = _file_cfg.get(_NOMINA_FIRMAS_KEY, {})
     # Carpeta de destino para respaldos de BD
     BACKUP_FOLDER: str = _file_cfg.get(_BACKUP_FOLDER_KEY, "C:\\GestionTI\\Backups")
     # Carpeta de destino para los Excel de facturas
@@ -135,6 +138,19 @@ class Settings:
     def set_nomina_plantilla(self, plantilla: dict) -> None:
         """Guarda la plantilla del correo de nómina."""
         self.NOMINA_PLANTILLA = plantilla
+        self.save()
+
+    def get_nomina_firma(self, id_area: int) -> str:
+        """Retorna la firma HTML del área (cadena vacía si no está configurada)."""
+        if not isinstance(self.NOMINA_FIRMAS, dict):
+            return ""
+        return self.NOMINA_FIRMAS.get(str(id_area), "") or ""
+
+    def set_nomina_firma(self, id_area: int, firma_html: str) -> None:
+        """Guarda la firma HTML del área."""
+        if not isinstance(self.NOMINA_FIRMAS, dict):
+            self.NOMINA_FIRMAS = {}
+        self.NOMINA_FIRMAS[str(id_area)] = firma_html or ""
         self.save()
 
     def get_backup_folder(self) -> str:
@@ -209,6 +225,7 @@ class Settings:
 
         data[_NOMINA_KEY] = self.NOMINA_CREDENTIALS if isinstance(self.NOMINA_CREDENTIALS, dict) else {}
         data[_NOMINA_PLANTILLA_KEY] = self.NOMINA_PLANTILLA if isinstance(self.NOMINA_PLANTILLA, dict) else {}
+        data[_NOMINA_FIRMAS_KEY] = self.NOMINA_FIRMAS if isinstance(self.NOMINA_FIRMAS, dict) else {}
         data[_BACKUP_FOLDER_KEY] = self.BACKUP_FOLDER or "C:\\GestionTI\\Backups"
         data[_FACTURAS_FOLDER_KEY] = self.FACTURAS_EXCEL_FOLDER or "C:\\GestionTI\\Facturas"
         data[_RAZONES_SOCIALES_PDF_KEY] = self.RAZONES_SOCIALES_PDF if isinstance(self.RAZONES_SOCIALES_PDF, list) else []

@@ -173,6 +173,7 @@ class NominaService:
         fecha_inicio: date,
         fecha_fin: date,
         plantilla: dict | None = None,
+        firma_html: str = "",
     ) -> tuple[str, str]:
         """Retorna (body, content_type). Siempre HTML con tipografía Rubik."""
         import html as _html
@@ -204,7 +205,7 @@ class NominaService:
                 f'<p style="{self._PARRAFO_STYLE}">{_html.escape(t)}</p>'
                 for t in lineas_default
             ]
-            return self._envolver_html("".join(parts)), "HTML"
+            return self._envolver_html("".join(parts) + self._render_firma(firma_html)), "HTML"
 
         parts: list[str] = []
         for linea in plantilla["lineas"]:
@@ -219,7 +220,19 @@ class NominaService:
             else:
                 parts.append(f'<p style="{self._PARRAFO_STYLE}">{html_linea}</p>')
 
-        return self._envolver_html("".join(parts)), "HTML"
+        return self._envolver_html("".join(parts) + self._render_firma(firma_html)), "HTML"
+
+    def _render_firma(self, firma_html: str) -> str:
+        """Devuelve el bloque HTML de firma con separador, o cadena vacía si no hay firma."""
+        firma = (firma_html or "").strip()
+        if not firma:
+            return ""
+        return (
+            '<div style="margin-top:18pt;padding-top:10pt;'
+            'border-top:1pt solid #CBD5E1;">'
+            f'{firma}'
+            "</div>"
+        )
 
     def _render_linea(self, template: str, variables: dict, *, bold_vars: bool) -> str:
         """Devuelve el HTML de una línea sustituyendo variables.

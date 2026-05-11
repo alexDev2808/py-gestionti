@@ -17,6 +17,7 @@ class NominaConfigModal:
         page: ft.Page,
         area: AreasResponseDTO,
         credenciales: dict,
+        firma_html: str,
         on_save: Callable[[dict], None],
         on_cancel: Callable[[], None],
     ):
@@ -67,6 +68,21 @@ class NominaConfigModal:
             expand=True,
             hint_text="Dejar vacío para no cambiar",
         )
+        self._tf_firma = ft.TextField(
+            label="Firma HTML",
+            value=firma_html or "",
+            multiline=True,
+            min_lines=6,
+            max_lines=12,
+            expand=True,
+            hint_text=(
+                'Pega aquí el HTML de la firma. Ej.:\n'
+                '<p style="font-size:10pt;color:#0F172A;">Av. Industrial sección 1 #39<br>'
+                'San Luis Teolocholco, Tlaxcala. 90850<br>'
+                '<a href="https://www.taurus.com.mx">www.taurus.com.mx</a></p>'
+            ),
+            text_size=11,
+        )
         self._error_text = ft.Text("", color=ft.Colors.ERROR, size=12, visible=False)
 
         self.dialog = ft.AlertDialog(
@@ -83,6 +99,8 @@ class NominaConfigModal:
                 content=ft.Column(
                     spacing=12,
                     tight=True,
+                    height=560,
+                    scroll=ft.ScrollMode.AUTO,
                     controls=[
                         ft.Text("Datos del área", size=13, weight=ft.FontWeight.W_600,
                                 color=ft.Colors.ON_SURFACE_VARIANT),
@@ -99,6 +117,17 @@ class NominaConfigModal:
                         ft.Row(spacing=12, controls=[self._tf_tenant]),
                         ft.Row(spacing=12, controls=[self._tf_client_id]),
                         ft.Row(spacing=12, controls=[self._tf_secret]),
+                        ft.Divider(),
+                        ft.Text("Firma del correo (HTML)", size=13,
+                                weight=ft.FontWeight.W_600,
+                                color=ft.Colors.ON_SURFACE_VARIANT),
+                        ft.Text(
+                            "Aparece al final de cada CFDI enviado de esta razón social. "
+                            "Acepta HTML con estilos inline (font, color, links).",
+                            size=11,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                        ft.Row(spacing=12, controls=[self._tf_firma]),
                         self._error_text,
                     ],
                 ),
@@ -118,6 +147,7 @@ class NominaConfigModal:
         tenant_id = self._tf_tenant.value.strip()
         client_id = self._tf_client_id.value.strip()
         client_secret = self._tf_secret.value.strip()
+        firma_html = (self._tf_firma.value or "").strip()
 
         if not ruta:
             self._show_error("La ruta CFDI es obligatoria.")
@@ -137,6 +167,7 @@ class NominaConfigModal:
             "tenant_id": tenant_id,
             "client_id": client_id,
             "client_secret": client_secret,
+            "firma_html": firma_html,
         })
 
     def _show_error(self, msg: str) -> None:
