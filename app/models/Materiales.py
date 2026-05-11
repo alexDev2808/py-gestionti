@@ -1,6 +1,8 @@
 """Modelo de dominio para la entidad Materiales."""
 
 from dataclasses import dataclass
+from typing import Optional
+
 
 @dataclass
 class Materiales:
@@ -13,3 +15,4 @@ class Materiales:
     um: str
     casin: str
     categoria: str
+    nombre_subcategoria: Optional[str] = None

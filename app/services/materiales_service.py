@@ -27,6 +27,7 @@ class MaterialesService:
             um=m.um,
             casin=m.casin,
             categoria=m.categoria,
+            nombre_subcategoria=m.nombre_subcategoria,
         )
 
     def _validar(self, dto) -> None:

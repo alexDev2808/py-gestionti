@@ -45,6 +45,10 @@ class MaterialesController:
             if not q
             or q in str(it.idmaterial or "").lower()
             or q in str(it.nommaterial or "").lower()
+            or q in str(it.nammaterial or "").lower()
+            or q in str(it.idgruarticulo or "").lower()
+            or q in str(getattr(it, "nombre_subcategoria", "") or "").lower()
+            or q in str(it.casin or "").lower()
             or q in str(it.categoria or "").lower()
             or q in str(it.um or "").lower()
         ]

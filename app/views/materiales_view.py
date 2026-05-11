@@ -26,7 +26,11 @@ class MaterialesView(View):
     _COLUMNS: list[tuple[str, str]] = [
         ("ID Material", "idmaterial"),
         ("Nombre", "nommaterial"),
+        ("Nombre (EN)", "nammaterial"),
+        ("Grupo", "idgruarticulo"),
+        ("Subcategoría", "nombre_subcategoria"),
         ("U.M.", "um"),
+        ("CASIN", "casin"),
         ("Categoría", "categoria"),
         ("Acciones", "_actions"),
     ]

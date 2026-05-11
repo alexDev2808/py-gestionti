@@ -19,27 +19,26 @@ class MaterialesRepository:
             um=row.um,
             casin=row.casin,
             categoria=row.categoria,
+            nombre_subcategoria=getattr(row, "nombre_subcategoria", None),
         )
 
+    _SELECT_BASE = """
+        SELECT M.idmaterial, M.nommaterial, M.nammaterial, M.idgruarticulo,
+               M.idsubcatm, M.um, M.casin, M.categoria,
+               S.namsubcatm AS nombre_subcategoria
+        FROM Materiales M
+        LEFT JOIN Subcat_Materiales S ON S.idsubcatm = M.idsubcatm
+    """
+
     def get_all(self) -> List[Materiales]:
-        query = """
-            SELECT idmaterial, nommaterial, nammaterial, idgruarticulo,
-                   idsubcatm, um, casin, categoria
-            FROM Materiales
-            ORDER BY nommaterial
-        """
+        query = f"{self._SELECT_BASE} ORDER BY M.nommaterial"
         with get_connection() as conn:
             cursor = conn.cursor()
             rows = cursor.execute(query).fetchall()
         return [self._row_to_material(row) for row in rows]
 
     def get_by_id(self, idmaterial: str) -> Optional[Materiales]:
-        query = """
-            SELECT idmaterial, nommaterial, nammaterial, idgruarticulo,
-                   idsubcatm, um, casin, categoria
-            FROM Materiales
-            WHERE idmaterial = ?
-        """
+        query = f"{self._SELECT_BASE} WHERE M.idmaterial = ?"
         with get_connection() as conn:
             cursor = conn.cursor()
             row = cursor.execute(query, (idmaterial,)).fetchone()
