@@ -33,9 +33,10 @@ class PersonalRepository:
                 tipoPuesto,
                 activo,
                 id_area_res3,
+                correo_nomina,
                 claves_acceso
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
 
         params = (
@@ -55,6 +56,7 @@ class PersonalRepository:
             personal.tipo_puesto,
             int(personal.activo),
             personal.id_area_res3,
+            personal.correo_nomina,
             password_hashed,
         )
         with get_connection() as conn:
@@ -90,6 +92,7 @@ class PersonalRepository:
             tipo_puesto=row.tipo_puesto,
             activo=bool(row.activo),
             id_area_res3=row.id_area_res3,
+            correo_nomina=getattr(row, "correo_nomina", None),
             rol_app=getattr(row, "rol_app", None),
             nombre_departamento=getattr(row, "nombre_departamento", None),
             nombre_area=getattr(row, "nombre_area", None),
@@ -125,6 +128,7 @@ class PersonalRepository:
                 P.tipoPuesto AS tipo_puesto,
                 P.activo,
                 P.id_area_res3,
+                P.correo_nomina,
                 P.rol_app,
                 D.descp AS nombre_departamento,
                 A.nombre AS nombre_area,
@@ -178,6 +182,7 @@ class PersonalRepository:
                 P.tipoPuesto AS tipo_puesto,
                 P.activo,
                 P.id_area_res3,
+                P.correo_nomina,
                 P.rol_app,
                 D.descp AS nombre_departamento,
                 A.nombre AS nombre_area,
@@ -232,6 +237,7 @@ class PersonalRepository:
                 tipoPuesto AS tipo_puesto,
                 activo,
                 id_area_res3,
+                correo_nomina,
                 rol_app,
                 claves_acceso,
                 [pass] AS password_hash
@@ -287,6 +293,7 @@ class PersonalRepository:
                 tipoPuesto = ?,
                 activo = ?,
                 id_area_res3 = ?,
+                correo_nomina = ?,
                 claves_acceso = ?
             WHERE id_empleado = ?
         """
@@ -310,6 +317,7 @@ class PersonalRepository:
                     personal.tipo_puesto,
                     int(personal.activo),
                     personal.id_area_res3,
+                    personal.correo_nomina,
                     password_hashed,
                     personal.num_empleado,
                 ),
@@ -348,7 +356,8 @@ class PersonalRepository:
                 perm_fsm = ?,
                 tipoPuesto = ?,
                 activo = ?,
-                id_area_res3 = ?
+                id_area_res3 = ?,
+                correo_nomina = ?
             WHERE id_empleado = ?
         """
         with get_connection() as conn:
@@ -370,6 +379,7 @@ class PersonalRepository:
                     personal.tipo_puesto,
                     int(personal.activo),
                     personal.id_area_res3,
+                    personal.correo_nomina,
                     personal.num_empleado,
                 ),
             )
@@ -389,6 +399,56 @@ class PersonalRepository:
             affected = cursor.rowcount
             conn.commit()
         return affected > 0
+
+    def update_correo_nomina(self, num_empleado: str, correo: Optional[str]) -> bool:
+        """Actualiza el correo dedicado para envío de CFDI de nómina."""
+        query = "UPDATE Personal SET correo_nomina = ? WHERE id_empleado = ?"
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, (correo, num_empleado))
+            affected = cursor.rowcount
+            conn.commit()
+        return affected > 0
+
+    def bulk_update_correo_nomina(
+        self, filas: list[tuple[str, Optional[str]]]
+    ) -> tuple[int, int]:
+        """Aplica una lista de pares (num_empleado, correo) en lote.
+
+        Retorna (actualizados, no_encontrados).
+        """
+        if not filas:
+            return 0, 0
+        actualizados = 0
+        no_encontrados = 0
+        query = "UPDATE Personal SET correo_nomina = ? WHERE id_empleado = ?"
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            for num_empleado, correo in filas:
+                cursor.execute(query, (correo, num_empleado))
+                if cursor.rowcount > 0:
+                    actualizados += 1
+                else:
+                    no_encontrados += 1
+            conn.commit()
+        return actualizados, no_encontrados
+
+    def existen_num_empleados(self, num_empleados: list[str]) -> set[str]:
+        """Devuelve el subconjunto de num_empleados que existen en la tabla Personal."""
+        if not num_empleados:
+            return set()
+        # Hacemos chunks para evitar exceder límite de parámetros del driver.
+        encontrados: set[str] = set()
+        chunk_size = 500
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            for i in range(0, len(num_empleados), chunk_size):
+                chunk = num_empleados[i:i + chunk_size]
+                placeholders = ",".join("?" * len(chunk))
+                q = f"SELECT id_empleado FROM Personal WHERE id_empleado IN ({placeholders})"
+                rows = cursor.execute(q, chunk).fetchall()
+                encontrados.update(str(r.id_empleado) for r in rows)
+        return encontrados
 
     def update_rol_app(self, num_empleado: str, rol_app: Optional[str]) -> bool:
         """Actualiza el rol de la app de gestión para el empleado indicado."""

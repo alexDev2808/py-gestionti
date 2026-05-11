@@ -128,10 +128,11 @@ class NominaController:
                 continue
 
             nombre = f"{personal.nombres} {personal.apellido_paterno} {personal.apellido_materno}".strip()
+            correo_envio = personal.correo_nomina or ""
 
             if not xml_path:
                 estado = "sin_xml"
-            elif not personal.mail:
+            elif not correo_envio:
                 estado = "sin_correo"
             else:
                 estado = "listo"
@@ -139,7 +140,7 @@ class NominaController:
             items.append(NominaItem(
                 num_empleado=num_empleado_db,
                 nombre_empleado=nombre,
-                correo=personal.mail or "",
+                correo=correo_envio,
                 pdf_path=str(pdf_path),
                 xml_path=str(xml_path) if xml_path else "",
                 pdf_nombre=pdf_path.name,
@@ -159,14 +160,14 @@ class NominaController:
     # ------------------------------------------------------------------ #
 
     def actualizar_correo_empleado(self, num_empleado: str, nuevo_correo: str) -> tuple[bool, str]:
-        """Actualiza el correo del empleado en la BD."""
+        """Actualiza el correo de nómina (correo_nomina) del empleado en la BD."""
         correo = (nuevo_correo or "").strip()
         if not correo:
             return False, "El correo no puede estar vacío."
         if "@" not in correo or "." not in correo.split("@")[-1]:
             return False, "Formato de correo inválido."
         try:
-            ok = self._personal_repo.update_mail(num_empleado, correo)
+            ok = self._personal_repo.update_correo_nomina(num_empleado, correo)
             if not ok:
                 return False, "No se encontró el empleado."
             return True, "Correo actualizado."

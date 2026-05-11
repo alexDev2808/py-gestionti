@@ -66,10 +66,16 @@ class PersonalController:
                 return True
             num = str(getattr(item, "num_empleado", "") or "").lower()
             mail = str(getattr(item, "mail", "") or "").lower()
+            correo_nom = str(getattr(item, "correo_nomina", "") or "").lower()
             nombres = str(getattr(item, "nombres", "") or "").lower()
             ap = str(getattr(item, "apellido_paterno", "") or "").lower()
             am = str(getattr(item, "apellido_materno", "") or "").lower()
-            return q in num or q in mail or q in f"{nombres} {ap} {am}"
+            return (
+                q in num
+                or q in mail
+                or q in correo_nom
+                or q in f"{nombres} {ap} {am}"
+            )
 
         self.filtered = [it for it in self.all_items if matches(it)]
 
@@ -206,6 +212,7 @@ class PersonalController:
                 tipo_puesto=valores["tipo_puesto"],
                 id_area_res3=valores.get("id_area_res3"),
                 activo=valores.get("activo", personal.activo),
+                correo_nomina=valores.get("correo_nomina") or None,
             )
             ok, message, _ = self.service.actualizar_personal(personal.num_empleado, dto)
             return ok, message
@@ -257,6 +264,7 @@ class PersonalController:
             tipo_puesto=data["tipo_puesto"],
             activo=data.get("activo", True),
             id_area_res3=data.get("id_area_res3"),
+            correo_nomina=data.get("correo_nomina") or None,
         )
         return self.service.crear_personal(dto)
 
@@ -302,6 +310,7 @@ class PersonalController:
                 tipo_puesto=to_int("tipo_puesto"),
                 activo=True,
                 id_area_res3=to_int("id_area_res3", optional=True),
+                correo_nomina=form_values.get("correo_nomina", "").strip() or None,
             )
             ok, message, _ = self.service.crear_personal(dto)
             return ok, message

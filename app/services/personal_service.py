@@ -52,6 +52,7 @@ class PersonalService:
             tipo_puesto=personal.tipo_puesto,
             activo=personal.activo,
             id_area_res3=personal.id_area_res3,
+            correo_nomina=personal.correo_nomina,
             nombre_departamento=personal.nombre_departamento,
             nombre_area=personal.nombre_area,
             nombre_jefe=personal.nombre_jefe,
@@ -118,6 +119,7 @@ class PersonalService:
             tipo_puesto=dto.tipo_puesto,
             activo=dto.activo,
             id_area_res3=dto.id_area_res3,
+            correo_nomina=dto.correo_nomina,
         )
 
         saved = self.repository.create(personal, password_plain, password_hashed)
@@ -187,6 +189,7 @@ class PersonalService:
                 tipo_puesto=dto.tipo_puesto,
                 activo=dto.activo,
                 id_area_res3=dto.id_area_res3,
+                correo_nomina=dto.correo_nomina,
             )
         )
         if not updated:

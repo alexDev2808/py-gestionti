@@ -21,3 +21,4 @@ class PersonalCreateDTO:
     tipo_puesto: int
     activo: bool = True
     id_area_res3: Optional[int] = None
+    correo_nomina: Optional[str] = None

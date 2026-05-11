@@ -68,6 +68,7 @@ class PersonalEditModal:
         for ctrl in (
             self._num_empleado, self._nombres,
             self._apellido_paterno, self._apellido_materno, self._mail,
+            self._correo_nomina,
         ):
             ctrl.error_text = None
 
@@ -101,6 +102,12 @@ class PersonalEditModal:
             if not _EMAIL_RE.match(mail):
                 self._mail.error_text = "Ingresa un correo válido (ej. usuario@dominio.com)."
                 valid = False
+
+        # Correo de nómina: opcional, pero si se ingresa debe tener formato válido
+        correo_nom = (self._correo_nomina.value or "").strip()
+        if correo_nom and not _EMAIL_RE.match(correo_nom):
+            self._correo_nomina.error_text = "Formato inválido (ej. usuario@dominio.com)."
+            valid = False
 
         # Dropdowns obligatorios
         required_dd = [
@@ -144,6 +151,12 @@ class PersonalEditModal:
         self._apellido_paterno = ft.TextField(label="Apellido paterno", value=p.apellido_paterno if p else "", width=400)
         self._apellido_materno = ft.TextField(label="Apellido materno", value=p.apellido_materno if p else "", width=400)
         self._mail = ft.TextField(label="Correo", value=p.mail if p else "", width=400)
+        self._correo_nomina = ft.TextField(
+            label="Correo Nómina",
+            value=(p.correo_nomina if (p and p.correo_nomina) else ""),
+            width=400,
+            hint_text="Correo al que se enviará el CFDI (opcional)",
+        )
 
         self._depto_dd = self._dd("Departamento", self._departamentos)
         self._area_dd = self._dd("Área", self._areas)
@@ -211,6 +224,7 @@ class PersonalEditModal:
                         self._apellido_paterno,
                         self._apellido_materno,
                         self._mail,
+                        self._correo_nomina,
                         ft.Divider(height=1),
                         self._depto_dd,
                         self._area_dd,
@@ -244,6 +258,7 @@ class PersonalEditModal:
             "apellido_paterno": self._apellido_paterno.value or "",
             "apellido_materno": self._apellido_materno.value or "",
             "mail": self._mail.value or "",
+            "correo_nomina": self._correo_nomina.value or "",
             "id_departamento": self._depto_dd.value or "",
             "id_area": self._area_dd.value or "",
             "id_puesto": self._puesto_dd.value or "",

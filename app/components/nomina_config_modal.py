@@ -180,12 +180,20 @@ class NominaConfigModal:
         )
 
     def _ensure_picker_registered(self) -> None:
-        # FilePicker en Flet 0.84 es un Service: se registra en page.services,
-        # nunca en page.overlay (eso causa "Unknown control: FilePicker").
+        # FilePicker en Flet 0.84 es un Service. Según la build, page.services
+        # puede exponer .register_service(...) o ser directamente una lista.
+        # En NINGÚN caso se agrega a page.overlay (causa "Unknown control: FilePicker").
         if self._file_picker_registrado:
             return
         try:
-            self._page.services.register_service(self._file_picker)
+            services = self._page.services
+            if hasattr(services, "register_service"):
+                services.register_service(self._file_picker)
+            elif isinstance(services, list):
+                if self._file_picker not in services:
+                    services.append(self._file_picker)
+            else:
+                raise RuntimeError(f"page.services tipo no soportado: {type(services).__name__}")
             self._file_picker_registrado = True
         except Exception as exc:
             self._show_error(f"No se pudo inicializar el selector de archivos: {exc}")

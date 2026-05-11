@@ -1,6 +1,7 @@
 import flet as ft
 
 from app.config.database import set_connection_error_callback
+from app.config.migrations import run_migrations
 from app.config.theme import configure_page
 from app.services.updater_service import ReleaseInfo, check_for_update, download_and_install
 from app.components.main_layout import MainLayout
@@ -46,6 +47,7 @@ from app.views.roles_proveedores_view import RolesProveedoresView
 from app.views.proveedores_view import ProveedoresView
 from app.views.facturas_view import FacturasView
 from app.views.separar_pdf_view import SepararPdfView
+from app.views.importar_correos_nomina_view import ImportarCorreosNominaView
 from app.views.profile_view import ProfileView
 from app.views.about_view import AboutView
 from app.views.backup_view import BackupView
@@ -190,6 +192,11 @@ def _start_update_check(page: ft.Page) -> None:
 
 def main(page: ft.Page):
     configure_page(page)
+    # Migraciones idempotentes de esquema (ALTER TABLE …)
+    try:
+        run_migrations()
+    except Exception as exc:
+        print(f"[main] Migraciones fallaron: {exc}")
     _start_update_check(page)
 
     # --- Monitor de conexión a la BD ---
@@ -383,6 +390,12 @@ def main(page: ft.Page):
             required_permission=PERM_UTILIDADES_VIEW,
         )
         registry.register(
+            ImportarCorreosNominaView,
+            icon=ft.Icons.MARK_EMAIL_READ_OUTLINED,
+            selected_icon=ft.Icons.MARK_EMAIL_READ,
+            required_permission=PERM_UTILIDADES_VIEW,
+        )
+        registry.register(
             RolesView,
             icon=ft.Icons.ADMIN_PANEL_SETTINGS_OUTLINED,
             selected_icon=ft.Icons.ADMIN_PANEL_SETTINGS,
@@ -475,7 +488,7 @@ def main(page: ft.Page):
         # ProfileView se accede por el botón "Perfil" del footer, no como ítem de nav.
         _group_keys = {RolesProveedoresView.key, ProveedoresView.key}
         _nomina_keys = {NominaEnvioView.key, NominaHistorialView.key}
-        _utilidades_keys = {SepararPdfView.key}
+        _utilidades_keys = {SepararPdfView.key, ImportarCorreosNominaView.key}
         _hidden_keys = {ProfileView.key}
         _regular_items = []
         _alertas_items = []

@@ -26,6 +26,7 @@ class PersonalView(View):
         ("# Empleado", "num_empleado"),
         ("Nombre completo", "_full_name"),
         ("Correo", "mail"),
+        ("Correo Nómina", "correo_nomina"),
         ("Depto.", "nombre_departamento"),
         ("Área", "nombre_area"),
         ("Cargo", "nombre_tc"),

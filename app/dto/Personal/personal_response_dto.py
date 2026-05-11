@@ -22,6 +22,7 @@ class PersonalResponseDTO:
     tipo_puesto: int
     activo: bool
     id_area_res3: Optional[int] = None
+    correo_nomina: Optional[str] = None
     rol_app: Optional[str] = None
     nombre_departamento: Optional[str] = None
     nombre_area: Optional[str] = None
