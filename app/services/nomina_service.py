@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import base64
+import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
+
+_VAR_PATTERN = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 
 @dataclass
@@ -136,6 +139,30 @@ class NominaService:
     # Plantilla de correo                                                  #
     # ------------------------------------------------------------------ #
 
+    # Fuente Rubik (con fallback a Arial para clientes que no la cargan, p.ej. Outlook desktop).
+    _FONT_FAMILY = "'Rubik','Rubik Light',Arial,sans-serif"
+    _PARRAFO_STYLE = (
+        f"margin:0 0 8pt 0;font-family:{_FONT_FAMILY};font-size:11pt;color:#0F172A;"
+    )
+
+    def _envolver_html(self, contenido_html: str) -> str:
+        """Envuelve el contenido HTML con <head> que precarga Rubik desde Google Fonts."""
+        return (
+            "<!DOCTYPE html><html><head>"
+            '<meta charset="UTF-8">'
+            '<link rel="preconnect" href="https://fonts.googleapis.com">'
+            '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+            '<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;600;700&display=swap" rel="stylesheet">'
+            "<style>"
+            f"body,p,div,td,th,span,strong{{font-family:{self._FONT_FAMILY};}}"
+            "</style>"
+            "</head>"
+            f'<body style="font-family:{self._FONT_FAMILY};color:#0F172A;">'
+            f'<div style="font-family:{self._FONT_FAMILY};">'
+            f"{contenido_html}"
+            "</div></body></html>"
+        )
+
     def formatear_cuerpo(
         self,
         rfc: str,
@@ -147,7 +174,7 @@ class NominaService:
         fecha_fin: date,
         plantilla: dict | None = None,
     ) -> tuple[str, str]:
-        """Retorna (body, content_type). content_type es 'HTML' cuando hay plantilla, 'Text' si no."""
+        """Retorna (body, content_type). Siempre HTML con tipografía Rubik."""
         import html as _html
 
         fi = fecha_inicio.strftime("%d/%m/%Y")
@@ -163,34 +190,61 @@ class NominaService:
         }
 
         if not plantilla or not plantilla.get("lineas"):
-            body = (
-                "Saludos cordiales\n"
-                "Servicio de entrega de CFDI de recibos electrónicos, emitido y enviado por:\n"
-                f"RFC: {rfc}\n"
-                f"Razón Social: {razon_social}\n"
-                "Datos CFDI del recibo electrónico:\n"
-                f"Nombre empleado: {num_empleado} - {nombre_empleado}\n"
-                f"Período: {num_semana} Semanal del {fi} al {ff} -\n"
-                "Se adjunta el archivo del CFDI correspondiente."
-            )
-            return body, "Text"
+            lineas_default = [
+                "Saludos cordiales",
+                "Servicio de entrega de CFDI de recibos electrónicos, emitido y enviado por:",
+                f"RFC: {rfc}",
+                f"Razón Social: {razon_social}",
+                "Datos CFDI del recibo electrónico:",
+                f"Nombre empleado: {num_empleado} - {nombre_empleado}",
+                f"Período: {num_semana} Semanal del {fi} al {ff} -",
+                "Se adjunta el archivo del CFDI correspondiente.",
+            ]
+            parts = [
+                f'<p style="{self._PARRAFO_STYLE}">{_html.escape(t)}</p>'
+                for t in lineas_default
+            ]
+            return self._envolver_html("".join(parts)), "HTML"
 
         parts: list[str] = []
         for linea in plantilla["lineas"]:
             if not linea.get("visible", True):
                 continue
-            texto = linea.get("texto", "")
-            try:
-                texto = texto.format(**variables)
-            except (KeyError, ValueError):
-                pass
-            escaped = _html.escape(texto)
+            html_linea = self._render_linea_con_variables_negritas(
+                linea.get("texto", ""), variables
+            )
             if linea.get("bold", False):
-                parts.append(f"<p><strong>{escaped}</strong></p>")
+                parts.append(f'<p style="{self._PARRAFO_STYLE}"><strong>{html_linea}</strong></p>')
             else:
-                parts.append(f"<p>{escaped}</p>")
+                parts.append(f'<p style="{self._PARRAFO_STYLE}">{html_linea}</p>')
 
-        return "\n".join(parts), "HTML"
+        return self._envolver_html("".join(parts)), "HTML"
+
+    def _render_linea_con_variables_negritas(self, template: str, variables: dict) -> str:
+        """Devuelve el HTML de una línea con cada {variable} envuelta en <strong>.
+
+        El texto estático se escapa pero no se pone en negritas; solo los valores
+        sustituidos quedan resaltados, dándole identidad al correo.
+        """
+        import html as _html
+
+        out: list[str] = []
+        last_end = 0
+        for m in _VAR_PATTERN.finditer(template):
+            estatico = template[last_end:m.start()]
+            if estatico:
+                out.append(_html.escape(estatico))
+            nombre = m.group(1)
+            if nombre in variables:
+                valor = _html.escape(str(variables[nombre]))
+                out.append(f"<strong>{valor}</strong>")
+            else:
+                # Variable desconocida: la dejamos visible tal cual (escapada).
+                out.append(_html.escape(m.group(0)))
+            last_end = m.end()
+        if last_end < len(template):
+            out.append(_html.escape(template[last_end:]))
+        return "".join(out)
 
     # ------------------------------------------------------------------ #
     # Envío por Microsoft Graph API                                        #

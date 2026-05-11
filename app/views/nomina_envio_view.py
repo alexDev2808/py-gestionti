@@ -137,32 +137,36 @@ class NominaEnvioView(View):
             ],
         )
 
-        return ft.Column(
-            spacing=16,
-            scroll=ft.ScrollMode.AUTO,
-            controls=[
-                ft.Row(
-                    spacing=12,
-                    wrap=True,
-                    controls=[
-                        self._dd_area,
-                        self._tf_anio,
-                        self._tf_semana,
-                        self._btn_escanear,
-                        self._btn_config,
-                        self._btn_plantilla,
-                    ],
-                ),
-                self._progress,
-                self._status_text,
-                self._banner_sin_correo,
-                ft.Row(controls=[self._tf_buscar]),
-                self._table_container,
-                ft.Row(
-                    spacing=16,
-                    controls=[self._btn_enviar, self._progress_envio],
-                ),
-            ],
+        return ft.Container(
+            expand=True,
+            theme=ft.Theme(font_family="Rubik"),
+            content=ft.Column(
+                spacing=16,
+                scroll=ft.ScrollMode.AUTO,
+                controls=[
+                    ft.Row(
+                        spacing=12,
+                        wrap=True,
+                        controls=[
+                            self._dd_area,
+                            self._tf_anio,
+                            self._tf_semana,
+                            self._btn_escanear,
+                            self._btn_config,
+                            self._btn_plantilla,
+                        ],
+                    ),
+                    self._progress,
+                    self._status_text,
+                    self._banner_sin_correo,
+                    ft.Row(controls=[self._tf_buscar]),
+                    self._table_container,
+                    ft.Row(
+                        spacing=16,
+                        controls=[self._btn_enviar, self._progress_envio],
+                    ),
+                ],
+            ),
         )
 
     def on_enter(self) -> None:

@@ -77,6 +77,9 @@ def configure_page(page: ft.Page) -> None:
     Argumentos:
         page (ft.Page): La página principal de la aplicación Flet.
     """
+    page.fonts = {
+        "Rubik": "https://raw.githubusercontent.com/googlefonts/rubik/main/fonts/variable/Rubik%5Bwght%5D.ttf",
+    }
     page.theme = AppTheme.create_theme()
     page.dark_theme = AppTheme.create_dark_theme()
     page.theme_mode = load_theme_mode(page, default=ft.ThemeMode.LIGHT)
