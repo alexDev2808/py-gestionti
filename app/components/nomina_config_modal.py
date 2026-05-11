@@ -30,6 +30,13 @@ class NominaConfigModal:
         self._file_picker = ft.FilePicker()
         self._file_picker_registrado = False
 
+        self._tf_nombre_legal = ft.TextField(
+            label="Razón social (nombre legal)",
+            value=area.nombre_legal or "",
+            expand=True,
+            hint_text="Manufacturas Bancor S.A. de C.V.",
+            tooltip="Se usa como {razon_social} en el correo. Si está vacío usa el nombre corto.",
+        )
         self._tf_rfc = ft.TextField(
             label="RFC",
             value=area.rfc or "",
@@ -133,6 +140,7 @@ class NominaConfigModal:
                     controls=[
                         ft.Text("Datos del área", size=13, weight=ft.FontWeight.W_600,
                                 color=ft.Colors.ON_SURFACE_VARIANT),
+                        ft.Row(spacing=12, controls=[self._tf_nombre_legal]),
                         ft.Row(spacing=12, controls=[self._tf_rfc]),
                         ft.Row(spacing=12, controls=[self._tf_correo]),
                         ft.Row(spacing=12, controls=[
@@ -228,6 +236,7 @@ class NominaConfigModal:
             pass
 
     def _handle_save(self, _: ft.ControlEvent) -> None:
+        nombre_legal = (self._tf_nombre_legal.value or "").strip()
         rfc = self._tf_rfc.value.strip()
         correo = self._tf_correo.value.strip()
         ruta = self._tf_ruta.value.strip()
@@ -263,6 +272,7 @@ class NominaConfigModal:
             "firma_html": firma_html,
             "logo_path": logo_path,
             "logo_width": logo_width,
+            "nombre_legal": nombre_legal,
         })
 
     def _show_error(self, msg: str) -> None:

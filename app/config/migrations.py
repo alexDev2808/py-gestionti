@@ -21,6 +21,18 @@ _MIGRATIONS: list[tuple[str, str]] = [
         END
         """,
     ),
+    (
+        "Areas.nombre_legal",
+        """
+        IF NOT EXISTS (
+            SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = 'Areas' AND COLUMN_NAME = 'nombre_legal'
+        )
+        BEGIN
+            ALTER TABLE Areas ADD nombre_legal NVARCHAR(255) NULL
+        END
+        """,
+    ),
 ]
 
 

@@ -62,8 +62,17 @@ class AreasController:
             if not q:
                 return True
             nombre = str(getattr(item, "nombre", "") or "").lower()
+            nombre_legal = str(getattr(item, "nombre_legal", "") or "").lower()
+            rfc = str(getattr(item, "rfc", "") or "").lower()
+            correo = str(getattr(item, "correo_remitente", "") or "").lower()
             id_str = str(getattr(item, "id_area", "") or "")
-            return q in nombre or q in id_str
+            return (
+                q in nombre
+                or q in nombre_legal
+                or q in rfc
+                or q in correo
+                or q in id_str
+            )
 
         self.filtered = [it for it in self.all_items if matches(it)]
 
@@ -153,7 +162,15 @@ class AreasController:
             if not nombre:
                 return False, "El nombre del área es obligatorio."
 
-            dto = AreasUpdateDTO(id_area=area.id_area, nombre=nombre)
+            dto = AreasUpdateDTO(
+                id_area=area.id_area,
+                nombre=nombre,
+                nombre_legal=form_values.get("nombre_legal", "").strip() or None,
+                rfc=form_values.get("rfc", "").strip() or None,
+                correo_remitente=form_values.get("correo_remitente", "").strip() or None,
+                ruta_cfdi=form_values.get("ruta_cfdi", "").strip() or None,
+                prefijo_carpeta=form_values.get("prefijo_carpeta", "").strip() or None,
+            )
             ok, message, _ = self.service.actualizar_area(area.id_area, dto)
             return ok, message
         except Exception as err:
@@ -174,7 +191,14 @@ class AreasController:
             if not nombre:
                 return False, "El nombre del área es obligatorio."
 
-            dto = AreasCreateDTO(nombre=nombre)
+            dto = AreasCreateDTO(
+                nombre=nombre,
+                nombre_legal=form_values.get("nombre_legal", "").strip() or None,
+                rfc=form_values.get("rfc", "").strip() or None,
+                correo_remitente=form_values.get("correo_remitente", "").strip() or None,
+                ruta_cfdi=form_values.get("ruta_cfdi", "").strip() or None,
+                prefijo_carpeta=form_values.get("prefijo_carpeta", "").strip() or None,
+            )
             ok, message, _ = self.service.crear_area(dto)
             return ok, message
         except Exception as err:

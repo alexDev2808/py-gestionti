@@ -26,6 +26,11 @@ class AreasView(View):
     _COLUMNS: list[tuple[str, str]] = [
         ("ID", "id_area"),
         ("Nombre", "nombre"),
+        ("Razón social", "nombre_legal"),
+        ("RFC", "rfc"),
+        ("Correo remitente", "correo_remitente"),
+        ("Ruta CFDI", "ruta_cfdi"),
+        ("Prefijo", "prefijo_carpeta"),
         ("Acciones", "_actions"),
     ]
 

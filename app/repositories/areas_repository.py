@@ -22,6 +22,7 @@ class AreasRepository:
         return Areas(
             id_area=row.id_area,
             nombre=row.nombre,
+            nombre_legal=getattr(row, "nombre_legal", None),
             rfc=getattr(row, "rfc", None),
             correo_remitente=getattr(row, "correo_remitente", None),
             ruta_cfdi=getattr(row, "ruta_cfdi", None),
@@ -36,7 +37,7 @@ class AreasRepository:
             List[Areas]: Lista de áreas.
         """
         query = """
-            SELECT id_area, nombre, rfc, correo_remitente, ruta_cfdi, prefijo_carpeta
+            SELECT id_area, nombre, nombre_legal, rfc, correo_remitente, ruta_cfdi, prefijo_carpeta
             FROM Areas
             ORDER BY nombre
         """
@@ -56,7 +57,7 @@ class AreasRepository:
             Optional[Areas]: El área encontrada, o None si no existe.
         """
         query = """
-            SELECT id_area, nombre, rfc, correo_remitente, ruta_cfdi, prefijo_carpeta
+            SELECT id_area, nombre, nombre_legal, rfc, correo_remitente, ruta_cfdi, prefijo_carpeta
             FROM Areas WHERE id_area = ?
         """
         with get_connection() as conn:
@@ -77,7 +78,7 @@ class AreasRepository:
             Optional[Areas]: El área encontrada, o None si no existe.
         """
         query = """
-            SELECT id_area, nombre, rfc, correo_remitente, ruta_cfdi, prefijo_carpeta
+            SELECT id_area, nombre, nombre_legal, rfc, correo_remitente, ruta_cfdi, prefijo_carpeta
             FROM Areas WHERE LOWER(nombre) = LOWER(?)
         """
         with get_connection() as conn:
@@ -87,26 +88,48 @@ class AreasRepository:
             return None
         return self._row_to_areas(row)
 
-    def create(self, nombre: str) -> Areas:
+    def create(self, area: Areas) -> Areas:
         """
-        Inserta una nueva área y retorna el registro creado con su ID generado.
+        Inserta una nueva área (todos los campos) y retorna el registro creado.
 
         Argumentos:
-            nombre (str): Nombre del área a crear.
+            area (Areas): Área a crear (id_area se ignora — lo asigna la BD).
 
         Retorna:
             Areas: Área recién creada con el id_area asignado por la BD.
         """
-        query = "INSERT INTO Areas (nombre) OUTPUT INSERTED.id_area VALUES (?)"
+        query = """
+            INSERT INTO Areas (
+                nombre, nombre_legal, rfc, correo_remitente, ruta_cfdi, prefijo_carpeta
+            )
+            OUTPUT INSERTED.id_area
+            VALUES (?, ?, ?, ?, ?, ?)
+        """
+        params = (
+            area.nombre,
+            area.nombre_legal,
+            area.rfc,
+            area.correo_remitente,
+            area.ruta_cfdi,
+            area.prefijo_carpeta,
+        )
         with get_connection() as conn:
             cursor = conn.cursor()
-            row = cursor.execute(query, (nombre,)).fetchone()
+            row = cursor.execute(query, params).fetchone()
             conn.commit()
-        return Areas(id_area=row[0], nombre=nombre)
+        return Areas(
+            id_area=row[0],
+            nombre=area.nombre,
+            nombre_legal=area.nombre_legal,
+            rfc=area.rfc,
+            correo_remitente=area.correo_remitente,
+            ruta_cfdi=area.ruta_cfdi,
+            prefijo_carpeta=area.prefijo_carpeta,
+        )
 
     def update(self, area: Areas) -> Optional[Areas]:
         """
-        Actualiza el nombre de un área existente.
+        Actualiza todos los campos editables de un área existente.
 
         Argumentos:
             area (Areas): Área con los datos actualizados.
@@ -114,10 +137,24 @@ class AreasRepository:
         Retorna:
             Optional[Areas]: El área actualizada, o None si no se encontró.
         """
-        query = "UPDATE Areas SET nombre = ? WHERE id_area = ?"
+        query = """
+            UPDATE Areas
+            SET nombre = ?, nombre_legal = ?, rfc = ?, correo_remitente = ?,
+                ruta_cfdi = ?, prefijo_carpeta = ?
+            WHERE id_area = ?
+        """
+        params = (
+            area.nombre,
+            area.nombre_legal,
+            area.rfc,
+            area.correo_remitente,
+            area.ruta_cfdi,
+            area.prefijo_carpeta,
+            area.id_area,
+        )
         with get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(query, (area.nombre, area.id_area))
+            cursor.execute(query, params)
             affected = cursor.rowcount
             conn.commit()
         if affected <= 0:
@@ -143,16 +180,19 @@ class AreasRepository:
         return affected > 0
 
     def update_nomina_config(self, id_area: int, rfc: str, correo_remitente: str,
-                            ruta_cfdi: str, prefijo_carpeta: str) -> bool:
+                            ruta_cfdi: str, prefijo_carpeta: str,
+                            nombre_legal: str = "") -> bool:
         """Actualiza los campos de configuración de nómina de un área."""
         query = """
             UPDATE Areas
-            SET rfc = ?, correo_remitente = ?, ruta_cfdi = ?, prefijo_carpeta = ?
+            SET rfc = ?, correo_remitente = ?, ruta_cfdi = ?, prefijo_carpeta = ?,
+                nombre_legal = ?
             WHERE id_area = ?
         """
         with get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(query, (rfc, correo_remitente, ruta_cfdi, prefijo_carpeta, id_area))
+            cursor.execute(query, (rfc, correo_remitente, ruta_cfdi, prefijo_carpeta,
+                                   nombre_legal, id_area))
             affected = cursor.rowcount
             conn.commit()
         return affected > 0

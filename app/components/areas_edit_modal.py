@@ -41,12 +41,46 @@ class AreasEditModal:
         Retorna:
             dict[str, ft.TextField]: Diccionario de campos indexados por nombre de atributo.
         """
+        a = self._area
         return {
             "nombre": ft.TextField(
-                label="Nombre del área",
-                value=self._area.nombre if self._area else "",
-                width=400,
+                label="Nombre corto del área *",
+                value=a.nombre if a else "",
+                width=460,
                 autofocus=True,
+                hint_text="M.BANCOR",
+            ),
+            "nombre_legal": ft.TextField(
+                label="Razón social (nombre legal)",
+                value=(a.nombre_legal if a and a.nombre_legal else ""),
+                width=460,
+                hint_text="Manufacturas Bancor S.A. de C.V.",
+            ),
+            "rfc": ft.TextField(
+                label="RFC",
+                value=(a.rfc if a and a.rfc else ""),
+                width=220,
+                hint_text="MBA000000XXX",
+                max_length=13,
+            ),
+            "correo_remitente": ft.TextField(
+                label="Correo remitente",
+                value=(a.correo_remitente if a and a.correo_remitente else ""),
+                width=460,
+                hint_text="nomina@empresa.com",
+            ),
+            "ruta_cfdi": ft.TextField(
+                label="Ruta base CFDI",
+                value=(a.ruta_cfdi if a and a.ruta_cfdi else ""),
+                width=460,
+                hint_text="D:\\nominas\\MBancor",
+            ),
+            "prefijo_carpeta": ft.TextField(
+                label="Prefijo carpeta",
+                value=(a.prefijo_carpeta if a and a.prefijo_carpeta else ""),
+                width=140,
+                hint_text="MB",
+                max_length=5,
             ),
         }
 
@@ -65,11 +99,24 @@ class AreasEditModal:
         return ft.AlertDialog(
             title=ft.Text(title),
             content=ft.Container(
-                width=450,
+                width=500,
+                height=520,
                 content=ft.Column(
                     tight=True,
-                    spacing=8,
-                    controls=list(self._fields.values()),
+                    spacing=10,
+                    scroll=ft.ScrollMode.AUTO,
+                    controls=[
+                        self._fields["nombre"],
+                        self._fields["nombre_legal"],
+                        ft.Divider(height=1),
+                        ft.Text("Configuración para envío de nómina (opcional)",
+                                size=12, weight=ft.FontWeight.W_600,
+                                color=ft.Colors.ON_SURFACE_VARIANT),
+                        self._fields["rfc"],
+                        self._fields["correo_remitente"],
+                        self._fields["ruta_cfdi"],
+                        self._fields["prefijo_carpeta"],
+                    ],
                 ),
             ),
             actions=[

@@ -287,6 +287,7 @@ class NominaEnvioView(View):
                     values.get("firma_html", ""),
                     values.get("logo_path", ""),
                     values.get("logo_width", 240),
+                    values.get("nombre_legal", ""),
                 )
                 if ok:
                     self._show_snackbar("Configuración guardada.")

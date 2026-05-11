@@ -31,6 +31,7 @@ class AreasService:
         return AreasResponseDTO(
             id_area=area.id_area,
             nombre=area.nombre,
+            nombre_legal=area.nombre_legal,
             rfc=area.rfc,
             correo_remitente=area.correo_remitente,
             ruta_cfdi=area.ruta_cfdi,
@@ -71,7 +72,15 @@ class AreasService:
         if existente:
             return False, f"Ya existe un área con el nombre '{dto.nombre.strip()}'.", None
 
-        area = self.repository.create(dto.nombre.strip())
+        area = self.repository.create(Areas(
+            id_area=0,
+            nombre=dto.nombre.strip(),
+            nombre_legal=(dto.nombre_legal or "").strip() or None,
+            rfc=(dto.rfc or "").strip() or None,
+            correo_remitente=(dto.correo_remitente or "").strip() or None,
+            ruta_cfdi=(dto.ruta_cfdi or "").strip() or None,
+            prefijo_carpeta=(dto.prefijo_carpeta or "").strip() or None,
+        ))
         return True, "Área creada correctamente.", self._to_response_dto(area)
 
     def listar_areas(self):
@@ -124,7 +133,15 @@ class AreasService:
         if duplicado and duplicado.id_area != id_area:
             return False, f"Ya existe otra área con el nombre '{dto.nombre.strip()}'.", None
 
-        updated = self.repository.update(Areas(id_area=id_area, nombre=dto.nombre.strip()))
+        updated = self.repository.update(Areas(
+            id_area=id_area,
+            nombre=dto.nombre.strip(),
+            nombre_legal=(dto.nombre_legal or "").strip() or None,
+            rfc=(dto.rfc or "").strip() or None,
+            correo_remitente=(dto.correo_remitente or "").strip() or None,
+            ruta_cfdi=(dto.ruta_cfdi or "").strip() or None,
+            prefijo_carpeta=(dto.prefijo_carpeta or "").strip() or None,
+        ))
         if not updated:
             return False, "No se pudo actualizar el área.", None
 
@@ -150,6 +167,7 @@ class AreasService:
             correo_remitente=dto.correo_remitente or "",
             ruta_cfdi=dto.ruta_cfdi or "",
             prefijo_carpeta=dto.prefijo_carpeta or "",
+            nombre_legal=dto.nombre_legal or "",
         )
         if not ok:
             return False, "No se pudo actualizar la configuración.", None

@@ -10,6 +10,7 @@ class AreasResponseDTO:
 
     id_area: int
     nombre: str
+    nombre_legal: Optional[str] = None
     rfc: Optional[str] = None
     correo_remitente: Optional[str] = None
     ruta_cfdi: Optional[str] = None

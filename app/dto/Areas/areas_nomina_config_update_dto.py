@@ -12,3 +12,4 @@ class AreasNominaConfigUpdateDTO:
     correo_remitente: Optional[str]
     ruta_cfdi: Optional[str]
     prefijo_carpeta: Optional[str]
+    nombre_legal: Optional[str] = None

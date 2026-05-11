@@ -50,6 +50,7 @@ class NominaController:
         firma_html: str = "",
         logo_path: str = "",
         logo_width: int = 240,
+        nombre_legal: str = "",
     ) -> tuple[bool, str]:
         dto = AreasNominaConfigUpdateDTO(
             id_area=id_area,
@@ -57,6 +58,7 @@ class NominaController:
             correo_remitente=correo_remitente.strip(),
             ruta_cfdi=ruta_cfdi.strip(),
             prefijo_carpeta=prefijo_carpeta.strip(),
+            nombre_legal=(nombre_legal or "").strip(),
         )
         ok, msg, _ = self._areas_service.actualizar_nomina_config(dto)
         if not ok:
@@ -188,6 +190,10 @@ class NominaController:
         plantilla = settings.get_nomina_plantilla()
 
         fecha_inicio, fecha_fin = self._nomina_service.calcular_periodo(item.anio, item.num_semana)
+        # Razón social fiscal viene de Areas.nombre_legal (e.g. "Manufacturas Bancor S.A. de C.V.").
+        # Si no está configurado, cae al nombre corto como fallback.
+        razon_social = (area.nombre_legal or "").strip() or area.nombre
+
         subject_tpl = plantilla.get("subject", "CFDI Nómina Semana {num_semana} - {num_empleado} {nombre_empleado}")
         try:
             subject = subject_tpl.format(
@@ -195,7 +201,7 @@ class NominaController:
                 num_empleado=item.num_empleado,
                 nombre_empleado=item.nombre_empleado,
                 rfc=area.rfc or "",
-                razon_social=area.nombre,
+                razon_social=razon_social,
             )
         except (KeyError, ValueError):
             subject = subject_tpl
@@ -207,7 +213,7 @@ class NominaController:
 
         body, content_type = self._nomina_service.formatear_cuerpo(
             rfc=area.rfc or "",
-            razon_social=area.nombre,
+            razon_social=razon_social,
             num_empleado=item.num_empleado,
             nombre_empleado=item.nombre_empleado,
             num_semana=item.num_semana,
