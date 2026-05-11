@@ -6,7 +6,7 @@ con matches/errores y aplica los cambios solo cuando el usuario confirma.
 
 from __future__ import annotations
 
-import threading
+import asyncio
 from pathlib import Path
 from typing import Optional
 
@@ -162,50 +162,87 @@ class ImportarCorreosNominaView(View):
         self._safe_update()
         self._procesar_excel()
 
+    # Tope visual para no congelar la UI con miles de filas.
+    _MAX_FILAS_VISIBLES = 500
+
     def _procesar_excel(self) -> None:
         if not self._path:
             return
         self._set_progress(True)
-        self._set_status("Leyendo Excel y comparando con la base de datos…")
+        self._set_status("Leyendo Excel…")
         self._table_container.visible = False
         self._resumen_card.visible = False
         self._btn_aplicar.visible = False
         self._safe_update()
 
-        def _work() -> None:
+        async def _run() -> None:
+            ok = False
+            msg_notif = ""
             try:
-                filas = leer_excel(self._path)
+                # 1) Lectura del archivo (en thread, IO bloqueante)
+                filas = await asyncio.to_thread(leer_excel, self._path)
                 if not filas:
                     self._set_status("El Excel no contiene filas con datos.")
+                    msg_notif = "El Excel no contiene filas con datos."
                     return
+
+                # 2) Consulta en BD por chunks (también bloqueante)
+                self._set_status(f"Consultando BD para {len(filas)} registros…")
                 num_emps = [f.num_empleado for f in filas]
-                existentes = self._repo.existen_num_empleados(num_emps)
+                existentes = await asyncio.to_thread(
+                    self._repo.existen_num_empleados, num_emps
+                )
+
+                # 3) Construcción de resumen y render (rápido, en el event loop)
+                self._set_status("Construyendo resultados…")
                 self._resumen = construir_resumen(filas, existentes)
                 self._render_resumen(self._resumen)
+                ok = True
+                msg_notif = (
+                    f"{self._resumen.total} filas — "
+                    f"{self._resumen.listos} listos · "
+                    f"{self._resumen.no_existen} sin match · "
+                    f"{self._resumen.invalidos} inválidos · "
+                    f"{self._resumen.sin_correo} sin correo"
+                )
             except (FileNotFoundError, ValueError, ImportError) as exc:
                 self._set_status(f"Error: {exc}")
+                msg_notif = f"Error: {str(exc)[:120]}"
                 self._resumen = None
             except Exception as exc:
                 self._set_status(f"Error inesperado: {exc}")
+                msg_notif = f"Error inesperado: {str(exc)[:120]}"
                 self._resumen = None
             finally:
                 self._set_progress(False)
                 self._safe_update()
+                self._show_snackbar(
+                    "✓ Lectura y comparación completadas." if ok
+                    else "✗ Hubo un problema al procesar el Excel.",
+                    error=not ok,
+                )
+                self._notificar_so(msg_notif or "Proceso terminado.")
 
-        threading.Thread(target=_work, daemon=True).start()
+        self._lanzar_async(_run)
 
     # ------------------------------------------------------------------ #
     # Render del resumen + tabla                                           #
     # ------------------------------------------------------------------ #
 
     def _render_resumen(self, resumen: ResumenImport) -> None:
-        self._set_status(
+        truncado = len(resumen.filas) > self._MAX_FILAS_VISIBLES
+        visibles = resumen.filas[: self._MAX_FILAS_VISIBLES]
+
+        msg_status = (
             f"{resumen.total} filas leídas — "
             f"{resumen.listos} listos · "
             f"{resumen.no_existen} sin coincidencia · "
             f"{resumen.invalidos} inválidos · "
             f"{resumen.sin_correo} sin correo"
         )
+        if truncado:
+            msg_status += f" · mostrando primeras {self._MAX_FILAS_VISIBLES} en la tabla"
+        self._set_status(msg_status)
 
         def _stat(label: str, value: int, color: str) -> ft.Container:
             return ft.Container(
@@ -230,7 +267,7 @@ class ImportarCorreosNominaView(View):
             ],
         )
 
-        self._rows_container.controls = [self._build_row(f) for f in resumen.filas]
+        self._rows_container.controls = [self._build_row(f) for f in visibles]
         self._table_container.visible = True
 
         self._btn_aplicar.text = f"Aplicar cambios ({resumen.listos})"
@@ -310,12 +347,14 @@ class ImportarCorreosNominaView(View):
         self._show_snackbar(f"Importando {total} correos en segundo plano…")
         self._safe_update()
 
-        def _work() -> None:
+        async def _run() -> None:
             ok = False
             msg_status = ""
             msg_notif = ""
             try:
-                actualizados, no_encontrados = self._repo.bulk_update_correo_nomina(a_aplicar)
+                actualizados, no_encontrados = await asyncio.to_thread(
+                    self._repo.bulk_update_correo_nomina, a_aplicar
+                )
                 ok = True
                 resto = f" · {no_encontrados} no encontrados" if no_encontrados else ""
                 msg_status = f"✓ Importación completada: {actualizados} correos actualizados{resto}."
@@ -331,21 +370,32 @@ class ImportarCorreosNominaView(View):
                 "✓ Importación completada." if ok else "✗ Error en la importación.",
                 error=not ok,
             )
-
-            try:
-                from plyer import notification as _notif
-                _notif.notify(
-                    title="GestionTI — Importar correos de nómina",
-                    message=msg_notif,
-                    app_name="GestionTI",
-                    timeout=8,
-                )
-            except Exception:
-                pass
-
+            self._notificar_so(msg_notif)
             self._safe_update()
 
-        threading.Thread(target=_work, daemon=True).start()
+        self._lanzar_async(_run)
+
+    def _lanzar_async(self, coro_factory) -> None:
+        """Programa una corrutina en el event loop principal de Flet.
+
+        Pasar el factory (no el coroutine ya creado) evita warnings si reintentamos.
+        """
+        try:
+            asyncio.run_coroutine_threadsafe(coro_factory(), asyncio.get_event_loop())
+        except RuntimeError:
+            self.page.run_task(coro_factory)
+
+    def _notificar_so(self, mensaje: str) -> None:
+        try:
+            from plyer import notification as _notif
+            _notif.notify(
+                title="GestionTI — Importar correos de nómina",
+                message=mensaje or "Proceso terminado.",
+                app_name="GestionTI",
+                timeout=8,
+            )
+        except Exception:
+            pass
 
     def _show_snackbar(self, message: str, error: bool = False) -> None:
         sb = ft.SnackBar(ft.Text(message), bgcolor="#F44336" if error else "#4CAF50")
