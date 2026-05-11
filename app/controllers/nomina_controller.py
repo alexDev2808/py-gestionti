@@ -48,6 +48,8 @@ class NominaController:
         client_id: str,
         client_secret: str,
         firma_html: str = "",
+        logo_path: str = "",
+        logo_width: int = 240,
     ) -> tuple[bool, str]:
         dto = AreasNominaConfigUpdateDTO(
             id_area=id_area,
@@ -64,6 +66,8 @@ class NominaController:
             settings.set_nomina_credentials(id_area, tenant_id.strip(), client_id.strip(), client_secret.strip())
 
         settings.set_nomina_firma(id_area, firma_html or "")
+        settings.set_nomina_logo(id_area, (logo_path or "").strip())
+        settings.set_nomina_logo_width(id_area, logo_width)
 
         return True, "Configuración guardada."
 
@@ -72,6 +76,12 @@ class NominaController:
 
     def get_firma_area(self, id_area: int) -> str:
         return settings.get_nomina_firma(id_area)
+
+    def get_logo_area(self, id_area: int) -> str:
+        return settings.get_nomina_logo(id_area)
+
+    def get_logo_width_area(self, id_area: int) -> int:
+        return settings.get_nomina_logo_width(id_area)
 
     def get_plantilla(self) -> dict:
         return settings.get_nomina_plantilla()
@@ -189,6 +199,11 @@ class NominaController:
         except (KeyError, ValueError):
             subject = subject_tpl
 
+        from pathlib import Path as _P
+        logo_path = settings.get_nomina_logo(area.id_area)
+        tiene_logo = bool(logo_path) and _P(logo_path).exists()
+        logo_width = settings.get_nomina_logo_width(area.id_area)
+
         body, content_type = self._nomina_service.formatear_cuerpo(
             rfc=area.rfc or "",
             razon_social=area.nombre,
@@ -199,6 +214,8 @@ class NominaController:
             fecha_fin=fecha_fin,
             plantilla=plantilla,
             firma_html=settings.get_nomina_firma(area.id_area),
+            tiene_logo=tiene_logo,
+            logo_width=logo_width,
         )
 
         try:
@@ -213,6 +230,7 @@ class NominaController:
                 pdf_path=item.pdf_path,
                 xml_path=item.xml_path,
                 content_type=content_type,
+                logo_path=logo_path if tiene_logo else "",
             )
             self._historial_service.registrar(
                 num_semana=item.num_semana,

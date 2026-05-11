@@ -29,6 +29,8 @@ _META_KEYS = ["SETUP_DONE"]
 _NOMINA_KEY = "NOMINA_CREDENTIALS"
 _NOMINA_PLANTILLA_KEY = "NOMINA_PLANTILLA"
 _NOMINA_FIRMAS_KEY = "NOMINA_FIRMAS"
+_NOMINA_LOGOS_KEY = "NOMINA_LOGOS"
+_NOMINA_LOGO_WIDTHS_KEY = "NOMINA_LOGO_WIDTHS"
 _BACKUP_FOLDER_KEY = "BACKUP_FOLDER"
 _FACTURAS_FOLDER_KEY = "FACTURAS_EXCEL_FOLDER"
 _RAZONES_SOCIALES_PDF_KEY = "RAZONES_SOCIALES_PDF"
@@ -99,6 +101,10 @@ class Settings:
     NOMINA_PLANTILLA: dict = _file_cfg.get(_NOMINA_PLANTILLA_KEY, {})
     # Firmas HTML por área: {"id_area": "<html>"}
     NOMINA_FIRMAS: dict = _file_cfg.get(_NOMINA_FIRMAS_KEY, {})
+    # Rutas de logo (PNG/JPG) por área: {"id_area": "C:/.../logo.png"}
+    NOMINA_LOGOS: dict = _file_cfg.get(_NOMINA_LOGOS_KEY, {})
+    # Ancho del logo en px por área: {"id_area": 240}
+    NOMINA_LOGO_WIDTHS: dict = _file_cfg.get(_NOMINA_LOGO_WIDTHS_KEY, {})
     # Carpeta de destino para respaldos de BD
     BACKUP_FOLDER: str = _file_cfg.get(_BACKUP_FOLDER_KEY, "C:\\GestionTI\\Backups")
     # Carpeta de destino para los Excel de facturas
@@ -151,6 +157,40 @@ class Settings:
         if not isinstance(self.NOMINA_FIRMAS, dict):
             self.NOMINA_FIRMAS = {}
         self.NOMINA_FIRMAS[str(id_area)] = firma_html or ""
+        self.save()
+
+    def get_nomina_logo(self, id_area: int) -> str:
+        """Retorna la ruta del logo del área (cadena vacía si no está configurado)."""
+        if not isinstance(self.NOMINA_LOGOS, dict):
+            return ""
+        return self.NOMINA_LOGOS.get(str(id_area), "") or ""
+
+    def set_nomina_logo(self, id_area: int, logo_path: str) -> None:
+        """Guarda la ruta del archivo de logo del área."""
+        if not isinstance(self.NOMINA_LOGOS, dict):
+            self.NOMINA_LOGOS = {}
+        self.NOMINA_LOGOS[str(id_area)] = logo_path or ""
+        self.save()
+
+    def get_nomina_logo_width(self, id_area: int, default: int = 240) -> int:
+        """Retorna el ancho del logo en px (default si no está configurado)."""
+        if not isinstance(self.NOMINA_LOGO_WIDTHS, dict):
+            return default
+        try:
+            valor = int(self.NOMINA_LOGO_WIDTHS.get(str(id_area), default) or default)
+        except (TypeError, ValueError):
+            return default
+        return valor if valor > 0 else default
+
+    def set_nomina_logo_width(self, id_area: int, width_px: int) -> None:
+        """Guarda el ancho del logo en px del área."""
+        if not isinstance(self.NOMINA_LOGO_WIDTHS, dict):
+            self.NOMINA_LOGO_WIDTHS = {}
+        try:
+            valor = int(width_px)
+        except (TypeError, ValueError):
+            valor = 240
+        self.NOMINA_LOGO_WIDTHS[str(id_area)] = max(20, min(valor, 800))
         self.save()
 
     def get_backup_folder(self) -> str:
@@ -226,6 +266,8 @@ class Settings:
         data[_NOMINA_KEY] = self.NOMINA_CREDENTIALS if isinstance(self.NOMINA_CREDENTIALS, dict) else {}
         data[_NOMINA_PLANTILLA_KEY] = self.NOMINA_PLANTILLA if isinstance(self.NOMINA_PLANTILLA, dict) else {}
         data[_NOMINA_FIRMAS_KEY] = self.NOMINA_FIRMAS if isinstance(self.NOMINA_FIRMAS, dict) else {}
+        data[_NOMINA_LOGOS_KEY] = self.NOMINA_LOGOS if isinstance(self.NOMINA_LOGOS, dict) else {}
+        data[_NOMINA_LOGO_WIDTHS_KEY] = self.NOMINA_LOGO_WIDTHS if isinstance(self.NOMINA_LOGO_WIDTHS, dict) else {}
         data[_BACKUP_FOLDER_KEY] = self.BACKUP_FOLDER or "C:\\GestionTI\\Backups"
         data[_FACTURAS_FOLDER_KEY] = self.FACTURAS_EXCEL_FOLDER or "C:\\GestionTI\\Facturas"
         data[_RAZONES_SOCIALES_PDF_KEY] = self.RAZONES_SOCIALES_PDF if isinstance(self.RAZONES_SOCIALES_PDF, list) else []

@@ -18,6 +18,8 @@ class NominaConfigModal:
         area: AreasResponseDTO,
         credenciales: dict,
         firma_html: str,
+        logo_path: str,
+        logo_width: int,
         on_save: Callable[[dict], None],
         on_cancel: Callable[[], None],
     ):
@@ -25,6 +27,8 @@ class NominaConfigModal:
         self._area = area
         self._on_save = on_save
         self._on_cancel = on_cancel
+        self._file_picker = ft.FilePicker()
+        self._file_picker_registrado = False
 
         self._tf_rfc = ft.TextField(
             label="RFC",
@@ -67,6 +71,31 @@ class NominaConfigModal:
             can_reveal_password=True,
             expand=True,
             hint_text="Dejar vacío para no cambiar",
+        )
+        self._tf_logo = ft.TextField(
+            label="Ruta del logo (PNG/JPG)",
+            value=logo_path or "",
+            expand=True,
+            hint_text="C:\\...\\logo_manufacturas.png",
+            read_only=False,
+        )
+        self._btn_logo = ft.OutlinedButton(
+            "Examinar…",
+            icon=ft.Icons.IMAGE_OUTLINED,
+            on_click=self._pick_logo,
+        )
+        self._btn_logo_clear = ft.IconButton(
+            icon=ft.Icons.CLEAR,
+            tooltip="Quitar logo",
+            on_click=self._clear_logo,
+        )
+        self._tf_logo_width = ft.TextField(
+            label="Ancho (px)",
+            value=str(logo_width or 240),
+            width=110,
+            keyboard_type=ft.KeyboardType.NUMBER,
+            hint_text="240",
+            tooltip="Ancho del logo en píxeles (20–800)",
         )
         self._tf_firma = ft.TextField(
             label="Firma HTML",
@@ -127,6 +156,17 @@ class NominaConfigModal:
                             size=11,
                             color=ft.Colors.ON_SURFACE_VARIANT,
                         ),
+                        ft.Row(
+                            spacing=8,
+                            controls=[self._tf_logo, self._btn_logo, self._btn_logo_clear],
+                        ),
+                        ft.Row(spacing=8, controls=[self._tf_logo_width]),
+                        ft.Text(
+                            "El logo se inserta encima de la firma como imagen inline. "
+                            "Recomendado PNG con fondo neutral para verse bien en modo oscuro.",
+                            size=10,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
                         ft.Row(spacing=12, controls=[self._tf_firma]),
                         self._error_text,
                     ],
@@ -139,6 +179,46 @@ class NominaConfigModal:
             actions_alignment=ft.MainAxisAlignment.END,
         )
 
+    def _ensure_picker_registered(self) -> None:
+        # FilePicker en Flet 0.84 es un Service: se registra en page.services,
+        # nunca en page.overlay (eso causa "Unknown control: FilePicker").
+        if self._file_picker_registrado:
+            return
+        try:
+            self._page.services.register_service(self._file_picker)
+            self._file_picker_registrado = True
+        except Exception as exc:
+            self._show_error(f"No se pudo inicializar el selector de archivos: {exc}")
+
+    async def _pick_logo(self, e: ft.ControlEvent) -> None:
+        self._ensure_picker_registered()
+        try:
+            files = await self._file_picker.pick_files(
+                dialog_title="Selecciona el logo",
+                allow_multiple=False,
+                file_type=ft.FilePickerFileType.CUSTOM,
+                allowed_extensions=["png", "jpg", "jpeg", "gif", "webp"],
+            )
+        except Exception as exc:
+            self._show_error(f"Error al abrir el explorador: {exc}")
+            return
+        if not files:
+            return
+        ruta = files[0].path
+        if ruta:
+            self._tf_logo.value = ruta
+            try:
+                self._tf_logo.update()
+            except Exception:
+                pass
+
+    def _clear_logo(self, _: ft.ControlEvent) -> None:
+        self._tf_logo.value = ""
+        try:
+            self._tf_logo.update()
+        except Exception:
+            pass
+
     def _handle_save(self, _: ft.ControlEvent) -> None:
         rfc = self._tf_rfc.value.strip()
         correo = self._tf_correo.value.strip()
@@ -148,6 +228,11 @@ class NominaConfigModal:
         client_id = self._tf_client_id.value.strip()
         client_secret = self._tf_secret.value.strip()
         firma_html = (self._tf_firma.value or "").strip()
+        logo_path = (self._tf_logo.value or "").strip()
+        try:
+            logo_width = int((self._tf_logo_width.value or "240").strip())
+        except ValueError:
+            logo_width = 240
 
         if not ruta:
             self._show_error("La ruta CFDI es obligatoria.")
@@ -168,6 +253,8 @@ class NominaConfigModal:
             "client_id": client_id,
             "client_secret": client_secret,
             "firma_html": firma_html,
+            "logo_path": logo_path,
+            "logo_width": logo_width,
         })
 
     def _show_error(self, msg: str) -> None:

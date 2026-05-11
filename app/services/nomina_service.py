@@ -174,6 +174,8 @@ class NominaService:
         fecha_fin: date,
         plantilla: dict | None = None,
         firma_html: str = "",
+        tiene_logo: bool = False,
+        logo_width: int = 240,
     ) -> tuple[str, str]:
         """Retorna (body, content_type). Siempre HTML con tipografía Rubik."""
         import html as _html
@@ -205,7 +207,7 @@ class NominaService:
                 f'<p style="{self._PARRAFO_STYLE}">{_html.escape(t)}</p>'
                 for t in lineas_default
             ]
-            return self._envolver_html("".join(parts) + self._render_firma(firma_html)), "HTML"
+            return self._envolver_html("".join(parts) + self._render_firma(firma_html, tiene_logo, logo_width)), "HTML"
 
         parts: list[str] = []
         for linea in plantilla["lineas"]:
@@ -220,17 +222,36 @@ class NominaService:
             else:
                 parts.append(f'<p style="{self._PARRAFO_STYLE}">{html_linea}</p>')
 
-        return self._envolver_html("".join(parts) + self._render_firma(firma_html)), "HTML"
+        return self._envolver_html("".join(parts) + self._render_firma(firma_html, tiene_logo, logo_width)), "HTML"
 
-    def _render_firma(self, firma_html: str) -> str:
-        """Devuelve el bloque HTML de firma con separador, o cadena vacía si no hay firma."""
+    LOGO_CID = "logoNominaFirma"
+
+    def _render_firma(
+        self,
+        firma_html: str,
+        tiene_logo: bool = False,
+        logo_width: int = 240,
+    ) -> str:
+        """Devuelve el bloque HTML de firma con separador y logo opcional encima."""
         firma = (firma_html or "").strip()
-        if not firma:
+        if not firma and not tiene_logo:
             return ""
+
+        logo_html = ""
+        if tiene_logo:
+            ancho = max(20, min(int(logo_width or 240), 800))
+            logo_html = (
+                f'<div style="margin-bottom:8pt;">'
+                f'<img src="cid:{self.LOGO_CID}" alt="Logo" '
+                f'width="{ancho}" '
+                f'style="display:block;width:{ancho}px;height:auto;border:0;outline:none;">'
+                f'</div>'
+            )
+
         return (
             '<div style="margin-top:18pt;padding-top:10pt;'
             'border-top:1pt solid #CBD5E1;">'
-            f'{firma}'
+            f'{logo_html}{firma}'
             "</div>"
         )
 
@@ -275,6 +296,7 @@ class NominaService:
         pdf_path: str,
         xml_path: str,
         content_type: str = "Text",
+        logo_path: str = "",
     ) -> None:
         """
         Envía el correo con los archivos CFDI adjuntos usando Microsoft Graph API.
@@ -309,6 +331,22 @@ class NominaService:
                 "@odata.type": "#microsoft.graph.fileAttachment",
                 "name": Path(path).name,
                 "contentBytes": content,
+            })
+
+        if logo_path and Path(logo_path).exists():
+            ext = Path(logo_path).suffix.lower().lstrip(".")
+            mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+                        "gif": "image/gif", "webp": "image/webp"}
+            content_type_logo = mime_map.get(ext, "application/octet-stream")
+            with open(logo_path, "rb") as f:
+                logo_b64 = base64.b64encode(f.read()).decode()
+            attachments.append({
+                "@odata.type": "#microsoft.graph.fileAttachment",
+                "name": Path(logo_path).name,
+                "contentBytes": logo_b64,
+                "contentType": content_type_logo,
+                "contentId": self.LOGO_CID,
+                "isInline": True,
             })
 
         payload = {

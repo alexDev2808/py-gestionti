@@ -29,6 +29,8 @@ class NominaEnvioView(View):
         self._areas: list[AreasResponseDTO] = []
         self._items: list[NominaItem] = []
         self._enviando = False
+        # Reenvíos individuales en curso (por num_empleado), independientes del envío masivo.
+        self._reenvios_en_curso: set[str] = set()
         self._modal: Optional[NominaConfigModal] = None
         self._plantilla_modal: Optional[NominaPlantillaModal] = None
 
@@ -249,11 +251,15 @@ class NominaEnvioView(View):
             return
         creds = self._ctrl.get_credenciales(area.id_area)
         firma = self._ctrl.get_firma_area(area.id_area)
+        logo = self._ctrl.get_logo_area(area.id_area)
+        logo_w = self._ctrl.get_logo_width_area(area.id_area)
         self._modal = NominaConfigModal(
             page=self.page,
             area=area,
             credenciales=creds,
             firma_html=firma,
+            logo_path=logo,
+            logo_width=logo_w,
             on_save=self._guardar_config,
             on_cancel=self._cerrar_modal,
         )
@@ -279,6 +285,8 @@ class NominaEnvioView(View):
                     values["client_id"],
                     values["client_secret"],
                     values.get("firma_html", ""),
+                    values.get("logo_path", ""),
+                    values.get("logo_width", 240),
                 )
                 if ok:
                     self._show_snackbar("Configuración guardada.")
@@ -729,27 +737,23 @@ class NominaEnvioView(View):
             self._show_snackbar(f"No se pudo abrir el PDF: {exc}", error=True)
 
     def _reenviar_item(self, item: NominaItem) -> None:
-        if self._enviando:
-            self._show_snackbar("Hay un envío en curso, espera a que termine.", error=True)
-            return
         if item.estado not in ("listo", "sin_correo"):
             self._show_snackbar("No hay archivos válidos para enviar.", error=True)
             return
         if not item.correo:
             self._show_snackbar("El empleado no tiene correo. Edítalo primero.", error=True)
             return
+        if item.num_empleado in self._reenvios_en_curso:
+            self._show_snackbar(
+                f"Ya hay un reenvío en curso para {item.num_empleado}.", error=True
+            )
+            return
         area = self._get_area_sel()
         if not area:
             return
 
-        self._enviando = True
-        self._progress_envio.visible = True
-        try:
-            label: ft.Text = self._progress_envio.controls[1]
-            label.value = f"Reenviando — {item.num_empleado}"
-        except Exception:
-            pass
-        self._safe_update()
+        self._reenvios_en_curso.add(item.num_empleado)
+        self._show_snackbar(f"Reenviando {item.num_empleado}…")
 
         def _send() -> None:
             try:
@@ -757,14 +761,30 @@ class NominaEnvioView(View):
             except Exception as exc:
                 ok, msg_err = False, str(exc)
 
-            self._enviando = False
-            self._progress_envio.visible = False
+            self._reenvios_en_curso.discard(item.num_empleado)
 
             if ok:
-                self._set_status(f"Reenvío correcto: {item.num_empleado}")
+                msg_status = f"Reenvío correcto: {item.num_empleado}"
+                msg_notif = f"CFDI reenviado: {item.num_empleado} — {item.nombre_empleado}"
+                self._set_status(msg_status)
+                self._show_snackbar(f"✓ {item.num_empleado} reenviado.")
             else:
-                self._set_status(f"Error al reenviar {item.num_empleado}: {msg_err}")
+                msg_status = f"Error al reenviar {item.num_empleado}: {msg_err}"
+                msg_notif = f"Falló el reenvío de {item.num_empleado}: {msg_err[:80]}"
+                self._set_status(msg_status)
+                self._show_snackbar(f"✗ Error en {item.num_empleado}", error=True)
                 self._mostrar_error_detalle(msg_err)
+
+            try:
+                from plyer import notification as _notif
+                _notif.notify(
+                    title="GestionTI — Reenvío de nómina",
+                    message=msg_notif,
+                    app_name="GestionTI",
+                    timeout=8,
+                )
+            except Exception:
+                pass
 
             self._safe_update()
 
