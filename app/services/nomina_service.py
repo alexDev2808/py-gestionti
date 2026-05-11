@@ -210,8 +210,9 @@ class NominaService:
         for linea in plantilla["lineas"]:
             if not linea.get("visible", True):
                 continue
-            html_linea = self._render_linea_con_variables_negritas(
-                linea.get("texto", ""), variables
+            bold_vars = linea.get("bold_variables", True)
+            html_linea = self._render_linea(
+                linea.get("texto", ""), variables, bold_vars=bold_vars,
             )
             if linea.get("bold", False):
                 parts.append(f'<p style="{self._PARRAFO_STYLE}"><strong>{html_linea}</strong></p>')
@@ -220,11 +221,11 @@ class NominaService:
 
         return self._envolver_html("".join(parts)), "HTML"
 
-    def _render_linea_con_variables_negritas(self, template: str, variables: dict) -> str:
-        """Devuelve el HTML de una línea con cada {variable} envuelta en <strong>.
+    def _render_linea(self, template: str, variables: dict, *, bold_vars: bool) -> str:
+        """Devuelve el HTML de una línea sustituyendo variables.
 
-        El texto estático se escapa pero no se pone en negritas; solo los valores
-        sustituidos quedan resaltados, dándole identidad al correo.
+        Si bold_vars es True, cada {variable} se envuelve en <strong>; el texto
+        estático se escapa sin formato.
         """
         import html as _html
 
@@ -237,9 +238,8 @@ class NominaService:
             nombre = m.group(1)
             if nombre in variables:
                 valor = _html.escape(str(variables[nombre]))
-                out.append(f"<strong>{valor}</strong>")
+                out.append(f"<strong>{valor}</strong>" if bold_vars else valor)
             else:
-                # Variable desconocida: la dejamos visible tal cual (escapada).
                 out.append(_html.escape(m.group(0)))
             last_end = m.end()
         if last_end < len(template):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Callable
 
 import flet as ft
@@ -9,15 +10,17 @@ import flet as ft
 _DEFAULT_SUBJECT = "CFDI Nómina Semana {num_semana} - {num_empleado} {nombre_empleado}"
 
 _DEFAULT_LINEAS: list[dict] = [
-    {"texto": "Saludos cordiales", "bold": False, "visible": True},
-    {"texto": "Servicio de entrega de CFDI de recibos electrónicos, emitido y enviado por:", "bold": False, "visible": True},
-    {"texto": "RFC: {rfc}", "bold": False, "visible": True},
-    {"texto": "Razón Social: {razon_social}", "bold": False, "visible": True},
-    {"texto": "Datos CFDI del recibo electrónico:", "bold": True, "visible": True},
-    {"texto": "Nombre empleado: {num_empleado} - {nombre_empleado}", "bold": False, "visible": True},
-    {"texto": "Período: {num_semana} Semanal del {fecha_inicio} al {fecha_fin}", "bold": False, "visible": True},
-    {"texto": "Se adjunta el archivo del CFDI correspondiente.", "bold": False, "visible": True},
+    {"texto": "Saludos cordiales", "bold": False, "bold_variables": True, "visible": True},
+    {"texto": "Servicio de entrega de CFDI de recibos electrónicos, emitido y enviado por:", "bold": False, "bold_variables": True, "visible": True},
+    {"texto": "RFC: {rfc}", "bold": False, "bold_variables": True, "visible": True},
+    {"texto": "Razón Social: {razon_social}", "bold": False, "bold_variables": True, "visible": True},
+    {"texto": "Datos CFDI del recibo electrónico:", "bold": True, "bold_variables": True, "visible": True},
+    {"texto": "Nombre empleado: {num_empleado} - {nombre_empleado}", "bold": False, "bold_variables": True, "visible": True},
+    {"texto": "Período: {num_semana} Semanal del {fecha_inicio} al {fecha_fin}", "bold": False, "bold_variables": True, "visible": True},
+    {"texto": "Se adjunta el archivo del CFDI correspondiente.", "bold": False, "bold_variables": True, "visible": True},
 ]
+
+_VAR_PATTERN = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 _SAMPLE_VARS = {
     "rfc": "RFC000000XXX",
@@ -153,6 +156,18 @@ class NominaPlantillaModal:
                                             weight=ft.FontWeight.W_600,
                                             color=ft.Colors.ON_SURFACE_VARIANT,
                                             text_align=ft.TextAlign.CENTER,
+                                            tooltip="Negrita en toda la línea",
+                                        ),
+                                    ),
+                                    ft.Container(
+                                        width=80,
+                                        content=ft.Text(
+                                            "Var. negrita",
+                                            size=11,
+                                            weight=ft.FontWeight.W_600,
+                                            color=ft.Colors.ON_SURFACE_VARIANT,
+                                            text_align=ft.TextAlign.CENTER,
+                                            tooltip="Resaltar solo las {variables} en negrita",
                                         ),
                                     ),
                                     ft.Container(
@@ -209,6 +224,7 @@ class NominaPlantillaModal:
             dense=True,
         )
         cb_bold = ft.Checkbox(value=linea.get("bold", False))
+        cb_bold_vars = ft.Checkbox(value=linea.get("bold_variables", True))
         cb_visible = ft.Checkbox(value=linea.get("visible", True))
 
         delete_btn = ft.IconButton(
@@ -229,6 +245,11 @@ class NominaPlantillaModal:
                     content=cb_bold,
                 ),
                 ft.Container(
+                    width=80,
+                    alignment=ft.Alignment(0, 0),
+                    content=cb_bold_vars,
+                ),
+                ft.Container(
                     width=62,
                     alignment=ft.Alignment(0, 0),
                     content=cb_visible,
@@ -237,7 +258,13 @@ class NominaPlantillaModal:
             ],
         )
 
-        entry = {"tf": tf, "cb_bold": cb_bold, "cb_visible": cb_visible, "row": row}
+        entry = {
+            "tf": tf,
+            "cb_bold": cb_bold,
+            "cb_bold_vars": cb_bold_vars,
+            "cb_visible": cb_visible,
+            "row": row,
+        }
         self._linea_controls.append(entry)
         self._lineas_col.controls.append(row)
 
@@ -246,6 +273,7 @@ class NominaPlantillaModal:
 
         tf.on_change = _on_change
         cb_bold.on_change = _on_change
+        cb_bold_vars.on_change = _on_change
         cb_visible.on_change = _on_change
 
         def _delete(_e, _entry=entry):
@@ -287,20 +315,41 @@ class NominaPlantillaModal:
             if not entry["cb_visible"].value:
                 continue
             texto = entry["tf"].value or ""
-            try:
-                texto_preview = texto.format(**_SAMPLE_VARS)
-            except (KeyError, ValueError):
-                texto_preview = texto
-            is_bold = entry["cb_bold"].value
+            line_bold = bool(entry["cb_bold"].value)
+            vars_bold = bool(entry["cb_bold_vars"].value)
             controls.append(
                 ft.Text(
-                    texto_preview,
+                    spans=self._build_preview_spans(texto, line_bold, vars_bold),
                     size=12,
-                    weight=ft.FontWeight.BOLD if is_bold else ft.FontWeight.NORMAL,
                 )
             )
 
         self._preview_col.controls = controls
+
+    def _build_preview_spans(self, template: str, line_bold: bool, vars_bold: bool) -> list[ft.TextSpan]:
+        """Genera los spans del preview: estático normal/bold según line_bold; variables
+        siempre bold cuando vars_bold está activo (o cuando line_bold lo es)."""
+        base_weight = ft.FontWeight.BOLD if line_bold else ft.FontWeight.NORMAL
+        var_weight = ft.FontWeight.BOLD if (vars_bold or line_bold) else ft.FontWeight.NORMAL
+
+        spans: list[ft.TextSpan] = []
+        last_end = 0
+        for m in _VAR_PATTERN.finditer(template):
+            estatico = template[last_end:m.start()]
+            if estatico:
+                spans.append(ft.TextSpan(estatico, style=ft.TextStyle(weight=base_weight)))
+            nombre = m.group(1)
+            if nombre in _SAMPLE_VARS:
+                valor = str(_SAMPLE_VARS[nombre])
+                spans.append(ft.TextSpan(valor, style=ft.TextStyle(weight=var_weight)))
+            else:
+                spans.append(ft.TextSpan(m.group(0), style=ft.TextStyle(weight=base_weight)))
+            last_end = m.end()
+        if last_end < len(template):
+            spans.append(ft.TextSpan(template[last_end:], style=ft.TextStyle(weight=base_weight)))
+        if not spans:
+            spans.append(ft.TextSpan(template, style=ft.TextStyle(weight=base_weight)))
+        return spans
 
     # ------------------------------------------------------------------ #
     # Acciones                                                             #
@@ -320,6 +369,7 @@ class NominaPlantillaModal:
             {
                 "texto": entry["tf"].value or "",
                 "bold": bool(entry["cb_bold"].value),
+                "bold_variables": bool(entry["cb_bold_vars"].value),
                 "visible": bool(entry["cb_visible"].value),
             }
             for entry in self._linea_controls
