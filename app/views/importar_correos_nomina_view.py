@@ -12,6 +12,8 @@ from typing import Optional
 
 import flet as ft
 
+from app.components.personal_edit_modal import PersonalEditModal
+from app.controllers.personal_controller import PersonalController
 from app.repositories.personal_repository import PersonalRepository
 from app.services.correos_nomina_import_service import (
     FilaImport,
@@ -31,11 +33,13 @@ class ImportarCorreosNominaView(View):
     def __init__(self, page: ft.Page):
         super().__init__(page)
         self._repo = PersonalRepository()
+        self._personal_ctrl = PersonalController()
         self._file_picker = ft.FilePicker()
         self._file_picker_registrado = False
 
         self._path: Optional[Path] = None
         self._resumen: Optional[ResumenImport] = None
+        self._modal_alta: Optional[PersonalEditModal] = None
 
         self._lbl_archivo = ft.Text(
             "Sin archivo seleccionado",
@@ -274,10 +278,11 @@ class ImportarCorreosNominaView(View):
         self._btn_aplicar.disabled = resumen.listos == 0
         self._btn_aplicar.visible = True
 
-    _COLUMNS = ["Fila", "# Empleado", "Correo", "Estado", "Detalle"]
+    _COLUMNS = ["Fila", "# Empleado", "Correo", "Estado", "Detalle", ""]
     _W_FILA = 60
     _W_NUM = 110
     _W_ESTADO = 130
+    _W_ACCIONES = 56
 
     def _build_header(self) -> ft.Control:
         def _hcell(text: str, width: int = None) -> ft.Container:
@@ -295,6 +300,7 @@ class ImportarCorreosNominaView(View):
                 _hcell(self._COLUMNS[2]),
                 _hcell(self._COLUMNS[3], self._W_ESTADO),
                 _hcell(self._COLUMNS[4]),
+                _hcell(self._COLUMNS[5], self._W_ACCIONES),
             ]),
         )
 
@@ -311,6 +317,22 @@ class ImportarCorreosNominaView(View):
             "invalido": "Inválido",
             "sin_correo": "Sin correo",
         }.get(f.estado, f.estado)
+
+        if f.estado == "no_existe":
+            acciones = ft.Container(
+                width=self._W_ACCIONES,
+                alignment=ft.Alignment(0, 0),
+                content=ft.IconButton(
+                    icon=ft.Icons.PERSON_ADD_OUTLINED,
+                    tooltip="Dar de alta este colaborador",
+                    icon_size=18,
+                    icon_color=ft.Colors.PRIMARY,
+                    on_click=lambda _e, fila=f: self._dar_de_alta(fila),
+                ),
+            )
+        else:
+            acciones = ft.Container(width=self._W_ACCIONES)
+
         return ft.Container(
             content=ft.Row(spacing=0, controls=[
                 self._cell(str(f.fila), width=self._W_FILA, small=True),
@@ -319,6 +341,7 @@ class ImportarCorreosNominaView(View):
                 self._cell(etiqueta, width=self._W_ESTADO, color=color_estado),
                 self._cell(f.motivo or "", small=True,
                            color=ft.Colors.ON_SURFACE_VARIANT),
+                acciones,
             ]),
             border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
         )
@@ -330,6 +353,78 @@ class ImportarCorreosNominaView(View):
             content=ft.Text(value, size=11 if small else 12, no_wrap=True,
                             overflow=ft.TextOverflow.ELLIPSIS, color=color),
         )
+
+    # ------------------------------------------------------------------ #
+    # Dar de alta colaborador                                              #
+    # ------------------------------------------------------------------ #
+
+    def _dar_de_alta(self, fila: FilaImport) -> None:
+        self._set_progress(True)
+
+        async def _load() -> None:
+            try:
+                opciones = await asyncio.to_thread(self._personal_ctrl.fetch_opciones_modal)
+                self._set_progress(False)
+                self._abrir_modal_alta(fila, opciones)
+            except Exception as exc:
+                self._set_progress(False)
+                self._show_snackbar(f"Error al cargar catálogos: {exc}", error=True)
+            self._safe_update()
+
+        self._lanzar_async(_load)
+
+    def _abrir_modal_alta(self, fila: FilaImport, opciones: dict) -> None:
+        self._modal_alta = PersonalEditModal(
+            page=self.page,
+            departamentos=opciones["departamentos"],
+            areas=opciones["areas"],
+            puestos=opciones["puestos"],
+            jefes=opciones["jefes"],
+            cargos=opciones["cargos"],
+            tipo_puestos=opciones["tipo_puestos"],
+            on_save=lambda values: self._on_alta_save(fila, values),
+            on_cancel=self._close_modal_alta,
+            prefill={
+                "num_empleado": fila.num_empleado,
+                "correo_nomina": fila.correo or "",
+            },
+        )
+        self.page.show_dialog(self._modal_alta.dialog)
+
+    def _close_modal_alta(self) -> None:
+        if self._modal_alta:
+            try:
+                self.page.pop_dialog()
+            except Exception:
+                pass
+        self._modal_alta = None
+
+    def _on_alta_save(self, fila: FilaImport, form_values: dict) -> None:
+        self._close_modal_alta()
+        self._set_progress(True)
+
+        async def _create() -> None:
+            try:
+                ok, msg = await asyncio.to_thread(
+                    self._personal_ctrl.crear_personal_form, form_values
+                )
+                if ok:
+                    fila.estado = "ok"
+                    fila.motivo = ""
+                    if self._resumen:
+                        self._resumen.listos += 1
+                        self._resumen.no_existen -= 1
+                        self._render_resumen(self._resumen)
+                    self._show_snackbar(f"✓ Colaborador {fila.num_empleado} dado de alta.")
+                else:
+                    self._show_snackbar(f"✗ Error: {msg}", error=True)
+            except Exception as exc:
+                self._show_snackbar(f"✗ Error inesperado: {exc}", error=True)
+            finally:
+                self._set_progress(False)
+            self._safe_update()
+
+        self._lanzar_async(_create)
 
     # ------------------------------------------------------------------ #
     # Aplicar                                                              #

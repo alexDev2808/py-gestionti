@@ -32,6 +32,7 @@ class PersonalEditModal:
         on_save: Callable[[dict[str, str]], None],
         on_cancel: Callable[[], None],
         personal: Optional[PersonalResponseDTO] = None,
+        prefill: Optional[dict] = None,
     ):
         self._page = page
         self._departamentos = departamentos
@@ -46,6 +47,14 @@ class PersonalEditModal:
         self._is_edit = personal is not None
 
         self._build_controls()
+        if prefill:
+            _map = {
+                "num_empleado": self._num_empleado,
+                "correo_nomina": self._correo_nomina,
+            }
+            for k, v in prefill.items():
+                if k in _map:
+                    _map[k].value = v or ""
         if self._is_edit:
             self._preselect()
         self.dialog: ft.AlertDialog = self._build_dialog()
