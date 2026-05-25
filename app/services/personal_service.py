@@ -53,6 +53,7 @@ class PersonalService:
             activo=personal.activo,
             id_area_res3=personal.id_area_res3,
             correo_nomina=personal.correo_nomina,
+            password_plain=personal.password_plain,
             nombre_departamento=personal.nombre_departamento,
             nombre_area=personal.nombre_area,
             nombre_jefe=personal.nombre_jefe,

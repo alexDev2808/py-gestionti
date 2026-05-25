@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Optional
 
 import flet as ft
 
 from app.components.personal_edit_modal import PersonalEditModal
+from app.components.personal_export_modal import PersonalExportModal
 from app.components.table_toolbar import TableToolbar
 from app.controllers.personal_controller import PersonalController
 from app.dto.Personal.personal_response_dto import PersonalResponseDTO
 from app.services.audit_service import AuditService
 from app.services.permissions import PERM_PERSONAL_EDIT
+from app.services.personal_excel_export_service import exportar_personal
 from app.views.base import View
 
 
@@ -46,6 +49,10 @@ class PersonalView(View):
         self._audit = audit or AuditService()
 
         self._current_modal: Optional[PersonalEditModal] = None
+        self._export_modal: Optional[PersonalExportModal] = None
+
+        self._file_picker_export = ft.FilePicker()
+        self._file_picker_export_registrado = False
 
         # Ajustes del alto fijo de la tabla en función de la ventana.
         self._chrome_offset: int = 260
@@ -105,6 +112,12 @@ class PersonalView(View):
                     icon=ft.Icons.PERSON_ADD_OUTLINED,
                     visible=self.can(PERM_PERSONAL_EDIT),
                     on_click=lambda _: self._open_modal_async(),
+                ),
+                ft.OutlinedButton(
+                    "Exportar Excel",
+                    icon=ft.Icons.TABLE_VIEW,
+                    tooltip="Exportar datos de personal a Excel",
+                    on_click=lambda _: self._open_export_dialog(),
                 ),
                 ft.IconButton(
                     icon=ft.Icons.REFRESH,
@@ -188,6 +201,18 @@ class PersonalView(View):
         setattr(self.page, resize_attr, self._handle_page_resized)
         self._apply_table_height()
 
+        if not self._file_picker_export_registrado:
+            try:
+                services = self.page.services
+                if hasattr(services, "register_service"):
+                    services.register_service(self._file_picker_export)
+                elif isinstance(services, list):
+                    if self._file_picker_export not in services:
+                        services.append(self._file_picker_export)
+                self._file_picker_export_registrado = True
+            except Exception:
+                pass
+
         if not self._controller.loaded:
             self._load_data()
 
@@ -247,6 +272,63 @@ class PersonalView(View):
         """
         if self._controller.goto_page(index):
             self._render_page()
+
+    # ---------- Exportar Excel ----------
+
+    def _open_export_dialog(self) -> None:
+        if not self._controller.filtered:
+            self._show_snackbar("No hay datos para exportar.", error=True)
+            return
+        self._export_modal = PersonalExportModal(
+            page=self.page,
+            on_export=self._on_export_confirm,
+            on_cancel=self._close_export_modal,
+        )
+        self.page.show_dialog(self._export_modal.dialog)
+
+    def _close_export_modal(self) -> None:
+        if self._export_modal:
+            try:
+                self.page.pop_dialog()
+            except Exception:
+                pass
+        self._export_modal = None
+
+    def _on_export_confirm(self, columnas: list[tuple[str, str]]) -> None:
+        self._close_export_modal()
+        items = list(self._controller.filtered)
+
+        async def _pick_and_export() -> None:
+            try:
+                path = await self._file_picker_export.save_file(
+                    dialog_title="Guardar Excel de personal",
+                    file_name="personal_export.xlsx",
+                    allowed_extensions=["xlsx"],
+                )
+            except Exception as exc:
+                self._show_snackbar(f"Error al abrir el selector: {exc}", error=True)
+                return
+            if not path:
+                return
+
+            self._set_progress(True)
+            self._set_status("Generando Excel…")
+            self._safe_update()
+            try:
+                await asyncio.to_thread(exportar_personal, items, columnas, path)
+                self._show_snackbar(f"✓ Excel guardado: {Path(path).name}")
+                self._set_status(f"{len(self._controller.filtered)} de {len(self._controller.all_items)} registros.")
+            except Exception as exc:
+                self._show_snackbar(f"✗ Error al exportar: {exc}", error=True)
+                self._set_status("")
+            finally:
+                self._set_progress(False)
+            self._safe_update()
+
+        try:
+            asyncio.run_coroutine_threadsafe(_pick_and_export(), asyncio.get_event_loop())
+        except RuntimeError:
+            self.page.run_task(_pick_and_export)
 
     # ---------- Modal ----------
 
