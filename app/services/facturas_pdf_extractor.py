@@ -188,12 +188,12 @@ class _TelcelExtractor(_ProviderExtractor):
             re.compile(r"Importe\s*total\s*:?\s*\$?\s*([\d,\.]+)", re.IGNORECASE),
         ],
         "convenio": [
-            re.compile(r"\bBBVA\s+(\d{4,12})\s+\d{8,}", re.IGNORECASE),
+            re.compile(r"\bBBVA\s+(\d{4,12})\s+[\d][\d ]*\d", re.IGNORECASE),
             re.compile(r"Convenio(?:\s*CIE)?\s*:?\s*(\d{4,12})", re.IGNORECASE),
             re.compile(r"\bCIE\s*:?\s*(\d{4,12})", re.IGNORECASE),
         ],
         "referencia_pago": [
-            re.compile(r"\bBBVA\s+\d{4,12}\s+(\d{8,30})", re.IGNORECASE),
+            re.compile(r"\bBBVA\s+\d{4,12}\s+([\d][\d ]*\d)", re.IGNORECASE),
             re.compile(r"Referencia(?:\s*BBVA)?\s*:?\s*([\d\s]{8,30})", re.IGNORECASE),
         ],
     }

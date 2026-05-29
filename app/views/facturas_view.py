@@ -138,6 +138,14 @@ class FacturasView(View):
         )
 
         can_edit = self.can(PERM_FACTURAS_EDIT)
+        self._btn_nuevo_prov = ft.OutlinedButton(
+            "Nuevo proveedor",
+            icon=ft.Icons.STORE_OUTLINED,
+            tooltip="Crear un nuevo proveedor bajo la filial seleccionada",
+            visible=can_edit,
+            disabled=True,
+            on_click=lambda _: self._nuevo_proveedor(),
+        )
         self._btn_nuevo_cli = ft.OutlinedButton(
             "Nuevo cliente",
             icon=ft.Icons.PERSON_ADD_OUTLINED,
@@ -279,6 +287,7 @@ class FacturasView(View):
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             visible=self.can(PERM_FACTURAS_EDIT),
             controls=[
+                self._btn_nuevo_prov,
                 self._btn_nuevo_cli,
                 self._btn_destinatarios_cli,
                 self._btn_importar,
@@ -464,34 +473,43 @@ class FacturasView(View):
                             filial=p.id_filial, proveedor=p.id_factprov, cliente=c.id_factcli
                         ),
                         trailing_count=len([f for f in self._ctrl.facturas_list if f.id_factcli == cli.id_factcli]),
+                        on_edit=lambda c=cli: self._editar_nombre_cliente(c) if self.can(PERM_FACTURAS_EDIT) else None,
                     ))
         self._tree_container.controls = controls
 
     def _tree_node(self, label: str, icon: str, level: int, selected: bool,
-                   on_click, trailing_count: Optional[int] = None) -> ft.Control:
+                   on_click, trailing_count: Optional[int] = None, on_edit=None) -> ft.Control:
         bg = ft.Colors.PRIMARY_CONTAINER if selected else ft.Colors.TRANSPARENT
         fg = ft.Colors.ON_PRIMARY_CONTAINER if selected else ft.Colors.ON_SURFACE
         weight = ft.FontWeight.W_600 if (selected or level == 0) else ft.FontWeight.W_400
-        trailing = (
-            ft.Container(
+        trailing_controls = []
+        if on_edit is not None:
+            trailing_controls.append(ft.IconButton(
+                icon=ft.Icons.EDIT_OUTLINED,
+                icon_size=14,
+                tooltip="Renombrar",
+                icon_color=ft.Colors.ON_SURFACE_VARIANT,
+                on_click=lambda _, fn=on_edit: fn(),
+                style=ft.ButtonStyle(padding=ft.padding.all(4)),
+            ))
+        if trailing_count is not None:
+            trailing_controls.append(ft.Container(
                 bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
                 border_radius=10,
                 padding=ft.padding.symmetric(horizontal=6, vertical=2),
                 content=ft.Text(str(trailing_count), size=10, color=ft.Colors.ON_SURFACE_VARIANT),
-            )
-            if trailing_count is not None else ft.Container(width=0)
-        )
+            ))
         return ft.Container(
             on_click=lambda _: on_click(),
             ink=True, bgcolor=bg, border_radius=8,
             padding=ft.padding.only(left=8 + 16 * level, right=8, top=6, bottom=6),
             content=ft.Row(
-                spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 controls=[
                     ft.Icon(icon, size=16, color=fg),
                     ft.Text(label, size=13, weight=weight, color=fg, expand=True, no_wrap=True,
                             overflow=ft.TextOverflow.ELLIPSIS),
-                    trailing,
+                    *trailing_controls,
                 ],
             ),
         )
@@ -513,9 +531,11 @@ class FacturasView(View):
     def _actualizar_botones_seleccion(self) -> None:
         cliente_sel = self._sel_cliente is not None
         proveedor_sel = self._sel_proveedor is not None
+        filial_sel = self._sel_filial is not None
         self._btn_importar.disabled = not cliente_sel
         self._btn_destinatarios_cli.disabled = not cliente_sel
         self._btn_nuevo_cli.disabled = not proveedor_sel
+        self._btn_nuevo_prov.disabled = not filial_sel
 
         can_edit = self.can(PERM_FACTURAS_EDIT)
         if cliente_sel and can_edit:
@@ -705,7 +725,9 @@ class FacturasView(View):
                                   padding=ft.padding.symmetric(horizontal=4, vertical=2),
                                   content=actions))
 
+        total_w = sum(w for _, w, _ in cols) + self._ACCIONES_W
         return ft.Container(
+            width=total_w,
             content=ft.Row(spacing=0, controls=cells),
             border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
         )
@@ -940,6 +962,48 @@ class FacturasView(View):
         )
         self.page.show_dialog(self._destinatarios_modal.dialog)
 
+    def _nuevo_proveedor(self) -> None:
+        if self._sel_filial is None:
+            self._snackbar("Selecciona una filial en el árbol.", error=True)
+            return
+        filial = next((f for f in self._ctrl.filiales_list if f.id_filial == self._sel_filial), None)
+        if not filial:
+            self._snackbar("Filial no encontrada.", error=True)
+            return
+
+        tf_nombre = ft.TextField(label="Nombre del proveedor", autofocus=True, width=380)
+
+        def cerrar() -> None:
+            dlg.open = False
+            self._safe_update()
+
+        def confirmar(_: ft.ControlEvent) -> None:
+            nombre = (tf_nombre.value or "").strip()
+            if not nombre:
+                tf_nombre.error_text = "Ingresa un nombre."
+                self._safe_update()
+                return
+            cerrar()
+            ok, msg = self._ctrl.crear_proveedor(self._sel_filial, nombre)
+            self._snackbar(f"{'✓' if ok else '✗'} {msg or 'Proveedor creado.'}", error=not ok)
+            if ok:
+                self._cargar_todo()
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text(f"Nuevo proveedor — {filial.nombre}"),
+            content=ft.Container(width=400, content=tf_nombre),
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda _: cerrar()),
+                ft.FilledButton("Crear", icon=ft.Icons.CHECK, on_click=confirmar),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        if dlg not in self.page.overlay:
+            self.page.overlay.append(dlg)
+        dlg.open = True
+        self._safe_update()
+
     def _nuevo_cliente(self) -> None:
         if self._sel_proveedor is None:
             self._snackbar("Selecciona un proveedor en el árbol.", error=True)
@@ -974,6 +1038,42 @@ class FacturasView(View):
             actions=[
                 ft.TextButton("Cancelar", on_click=lambda _: cerrar()),
                 ft.FilledButton("Crear", icon=ft.Icons.CHECK, on_click=confirmar),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        if dlg not in self.page.overlay:
+            self.page.overlay.append(dlg)
+        dlg.open = True
+        self._safe_update()
+
+    def _editar_nombre_cliente(self, cli) -> None:
+        tf_nombre = ft.TextField(
+            label="Nombre del cliente", value=cli.nombre, autofocus=True, width=380,
+        )
+
+        def cerrar() -> None:
+            dlg.open = False
+            self._safe_update()
+
+        def confirmar(_: ft.ControlEvent) -> None:
+            nombre = (tf_nombre.value or "").strip()
+            if not nombre:
+                tf_nombre.error_text = "Ingresa un nombre."
+                self._safe_update()
+                return
+            cerrar()
+            ok, msg = self._ctrl.renombrar_cliente(cli.id_factcli, cli.id_factprov, nombre)
+            self._snackbar(f"{'✓' if ok else '✗'} {msg or 'Cliente actualizado.'}", error=not ok)
+            if ok:
+                self._cargar_todo()
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text(f"Renombrar cliente — {cli.filial_nombre} / {cli.proveedor_nombre}"),
+            content=ft.Container(width=400, content=tf_nombre),
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda _: cerrar()),
+                ft.FilledButton("Guardar", icon=ft.Icons.CHECK, on_click=confirmar),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
         )

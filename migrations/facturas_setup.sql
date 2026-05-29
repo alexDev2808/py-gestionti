@@ -63,22 +63,21 @@ CREATE INDEX IX_Facturas_Estado   ON Facturas(estado);
 -- ============================================================
 -- Seeds iniciales
 -- ============================================================
-INSERT INTO Filiales (nombre) VALUES ('México'), ('Tlaxcala');
+INSERT INTO Filiales (nombre) VALUES ('M.BANCOR'), ('TAURUS');
 
 INSERT INTO FacturaProveedores (id_filial, nombre)
-SELECT id_filial, 'Telcel'    FROM Filiales WHERE nombre = 'México'   UNION ALL
-SELECT id_filial, 'Alestra'   FROM Filiales WHERE nombre = 'Tlaxcala' UNION ALL
-SELECT id_filial, 'Megacable' FROM Filiales WHERE nombre = 'Tlaxcala' UNION ALL
-SELECT id_filial, 'AT&T'      FROM Filiales WHERE nombre = 'Tlaxcala' UNION ALL
-SELECT id_filial, 'Telcel'    FROM Filiales WHERE nombre = 'Tlaxcala';
+SELECT id_filial, 'Alestra' FROM Filiales WHERE nombre = 'M.BANCOR' UNION ALL
+SELECT id_filial, 'AT&T'    FROM Filiales WHERE nombre = 'M.BANCOR' UNION ALL
+SELECT id_filial, 'Telcel'  FROM Filiales WHERE nombre = 'M.BANCOR' UNION ALL
+SELECT id_filial, 'Telcel'  FROM Filiales WHERE nombre = 'TAURUS';
 
 INSERT INTO FacturaClientes (id_factprov, nombre)
-SELECT p.id_factprov, 'LOGYM'
+SELECT p.id_factprov, 'Tlaxcala'
 FROM FacturaProveedores p
 JOIN Filiales f ON p.id_filial = f.id_filial
-WHERE f.nombre = 'Tlaxcala' AND p.nombre = 'Telcel'
+WHERE f.nombre = 'M.BANCOR' AND p.nombre = 'Telcel'
 UNION ALL
-SELECT p.id_factprov, 'MANUFACTURAS BANCOR'
+SELECT p.id_factprov, 'México'
 FROM FacturaProveedores p
 JOIN Filiales f ON p.id_filial = f.id_filial
-WHERE f.nombre = 'Tlaxcala' AND p.nombre = 'Telcel';
+WHERE f.nombre = 'TAURUS' AND p.nombre = 'Telcel';

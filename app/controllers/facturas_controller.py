@@ -136,6 +136,13 @@ class FacturasController:
         ok, msg, _ = self.clientes.crear(FacturaClientesCreateDTO(id_factprov=id_factprov, nombre=nombre))
         return ok, msg
 
+    def renombrar_cliente(self, id_factcli: int, id_factprov: int, nuevo_nombre: str) -> tuple[bool, str]:
+        from app.dto.FacturaClientes.factura_clientes_update_dto import FacturaClientesUpdateDTO
+        ok, msg, _ = self.clientes.actualizar(
+            id_factcli, FacturaClientesUpdateDTO(id_factcli=id_factcli, id_factprov=id_factprov, nombre=nuevo_nombre)
+        )
+        return ok, msg
+
     def actualizar_correos_cliente(self, id_factcli: int, correos: str) -> tuple[bool, str]:
         ok, msg, _ = self.clientes.actualizar_correos(id_factcli, correos)
         return ok, msg
