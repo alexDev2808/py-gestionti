@@ -31,6 +31,7 @@ _NOMINA_PLANTILLA_KEY = "NOMINA_PLANTILLA"
 _NOMINA_FIRMAS_KEY = "NOMINA_FIRMAS"
 _NOMINA_LOGOS_KEY = "NOMINA_LOGOS"
 _NOMINA_LOGO_WIDTHS_KEY = "NOMINA_LOGO_WIDTHS"
+_NOMINA_TAURUS_RUTAS_KEY = "NOMINA_TAURUS_RUTAS"
 _BACKUP_FOLDER_KEY = "BACKUP_FOLDER"
 _FACTURAS_FOLDER_KEY = "FACTURAS_EXCEL_FOLDER"
 _RAZONES_SOCIALES_PDF_KEY = "RAZONES_SOCIALES_PDF"
@@ -105,6 +106,8 @@ class Settings:
     NOMINA_LOGOS: dict = _file_cfg.get(_NOMINA_LOGOS_KEY, {})
     # Ancho del logo en px por área: {"id_area": 240}
     NOMINA_LOGO_WIDTHS: dict = _file_cfg.get(_NOMINA_LOGO_WIDTHS_KEY, {})
+    # Rutas CFDI por tipo para Taurus: {"semanal": "...", "quincenal": "...", "promotoria": "..."}
+    NOMINA_TAURUS_RUTAS: dict = _file_cfg.get(_NOMINA_TAURUS_RUTAS_KEY, {})
     # Carpeta de destino para respaldos de BD
     BACKUP_FOLDER: str = _file_cfg.get(_BACKUP_FOLDER_KEY, "C:\\GestionTI\\Backups")
     # Carpeta de destino para los Excel de facturas
@@ -121,9 +124,10 @@ class Settings:
         self.save()
 
     def get_nomina_credentials(self, id_area: int) -> dict:
-        """Retorna las credenciales Graph API de un área con el secreto descifrado."""
+        """Retorna las credenciales de un área (Graph API o Gmail) con secretos descifrados."""
         from app.services.crypto_service import decrypt
         creds = dict(self.NOMINA_CREDENTIALS.get(str(id_area), {}))
+        # Graph API secret
         secret_enc = creds.pop("client_secret_enc", "")
         if secret_enc:
             try:
@@ -132,6 +136,15 @@ class Settings:
                 creds["client_secret"] = secret_enc
         else:
             creds["client_secret"] = ""
+        # Gmail App Password
+        pwd_enc = creds.pop("app_password_enc", "")
+        if pwd_enc:
+            try:
+                creds["app_password"] = decrypt(pwd_enc)
+            except Exception:
+                creds["app_password"] = pwd_enc
+        else:
+            creds["app_password"] = ""
         return creds
 
     def get_nomina_plantilla(self) -> dict:
@@ -170,6 +183,22 @@ class Settings:
         if not isinstance(self.NOMINA_LOGOS, dict):
             self.NOMINA_LOGOS = {}
         self.NOMINA_LOGOS[str(id_area)] = logo_path or ""
+        self.save()
+
+    def get_nomina_taurus_rutas(self) -> dict:
+        base = self.NOMINA_TAURUS_RUTAS if isinstance(self.NOMINA_TAURUS_RUTAS, dict) else {}
+        return {
+            "semanal":    base.get("semanal", "") or "",
+            "quincenal":  base.get("quincenal", "") or "",
+            "promotoria": base.get("promotoria", "") or "",
+        }
+
+    def set_nomina_taurus_rutas(self, rutas: dict) -> None:
+        self.NOMINA_TAURUS_RUTAS = {
+            "semanal":    str(rutas.get("semanal", "") or ""),
+            "quincenal":  str(rutas.get("quincenal", "") or ""),
+            "promotoria": str(rutas.get("promotoria", "") or ""),
+        }
         self.save()
 
     def get_nomina_logo_width(self, id_area: int, default: int = 240) -> int:
@@ -228,22 +257,42 @@ class Settings:
         self.RAZONES_SOCIALES_PDF = limpia
         self.save()
 
-    def set_nomina_credentials(self, id_area: int, tenant_id: str, client_id: str, client_secret: str) -> None:
-        """Guarda las credenciales Graph API de un área cifrando el secreto con DPAPI."""
+    def set_nomina_credentials(
+        self,
+        id_area: int,
+        metodo: str,
+        tenant_id: str = "",
+        client_id: str = "",
+        client_secret: str = "",
+        app_password: str = "",
+    ) -> None:
+        """Guarda las credenciales de un área cifrando el secreto/App Password con DPAPI.
+
+        metodo: 'graph' (Microsoft Graph / Outlook) | 'gmail'
+        """
         from app.services.crypto_service import encrypt, is_encrypted
         if not isinstance(self.NOMINA_CREDENTIALS, dict):
             self.NOMINA_CREDENTIALS = {}
         existing = self.NOMINA_CREDENTIALS.get(str(id_area), {})
-        if client_secret:
-            secret_enc = encrypt(client_secret) if not is_encrypted(client_secret) else client_secret
-        else:
-            # Secreto vacío = no cambiar; conservar el cifrado existente
-            secret_enc = existing.get("client_secret_enc", "")
-        self.NOMINA_CREDENTIALS[str(id_area)] = {
-            "tenant_id": tenant_id or existing.get("tenant_id", ""),
-            "client_id": client_id or existing.get("client_id", ""),
-            "client_secret_enc": secret_enc,
-        }
+        entry: dict = {"metodo": metodo}
+        if metodo == "gmail":
+            if app_password:
+                entry["app_password_enc"] = (
+                    encrypt(app_password) if not is_encrypted(app_password) else app_password
+                )
+            else:
+                entry["app_password_enc"] = existing.get("app_password_enc", "")
+        else:  # graph
+            if client_secret:
+                secret_enc = (
+                    encrypt(client_secret) if not is_encrypted(client_secret) else client_secret
+                )
+            else:
+                secret_enc = existing.get("client_secret_enc", "")
+            entry["tenant_id"] = tenant_id or existing.get("tenant_id", "")
+            entry["client_id"] = client_id or existing.get("client_id", "")
+            entry["client_secret_enc"] = secret_enc
+        self.NOMINA_CREDENTIALS[str(id_area)] = entry
         self.save()
 
     def save(self) -> None:
@@ -268,6 +317,7 @@ class Settings:
         data[_NOMINA_FIRMAS_KEY] = self.NOMINA_FIRMAS if isinstance(self.NOMINA_FIRMAS, dict) else {}
         data[_NOMINA_LOGOS_KEY] = self.NOMINA_LOGOS if isinstance(self.NOMINA_LOGOS, dict) else {}
         data[_NOMINA_LOGO_WIDTHS_KEY] = self.NOMINA_LOGO_WIDTHS if isinstance(self.NOMINA_LOGO_WIDTHS, dict) else {}
+        data[_NOMINA_TAURUS_RUTAS_KEY] = self.NOMINA_TAURUS_RUTAS if isinstance(self.NOMINA_TAURUS_RUTAS, dict) else {}
         data[_BACKUP_FOLDER_KEY] = self.BACKUP_FOLDER or "C:\\GestionTI\\Backups"
         data[_FACTURAS_FOLDER_KEY] = self.FACTURAS_EXCEL_FOLDER or "C:\\GestionTI\\Facturas"
         data[_RAZONES_SOCIALES_PDF_KEY] = self.RAZONES_SOCIALES_PDF if isinstance(self.RAZONES_SOCIALES_PDF, list) else []

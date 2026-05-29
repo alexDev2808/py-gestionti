@@ -281,10 +281,10 @@ class NominaService:
         return "".join(out)
 
     # ------------------------------------------------------------------ #
-    # Envío por Microsoft Graph API                                        #
+    # Envío por Microsoft Graph API (Outlook)                             #
     # ------------------------------------------------------------------ #
 
-    def enviar_cfdi(
+    def enviar_cfdi_graph(
         self,
         tenant_id: str,
         client_id: str,
@@ -298,11 +298,7 @@ class NominaService:
         content_type: str = "Text",
         logo_path: str = "",
     ) -> None:
-        """
-        Envía el correo con los archivos CFDI adjuntos usando Microsoft Graph API.
-
-        Lanza RuntimeError si el envío falla.
-        """
+        """Envía el correo con CFDIs adjuntos usando Microsoft Graph API."""
         import msal
         import requests
 
@@ -369,3 +365,80 @@ class NominaService:
         )
         if r.status_code != 202:
             raise RuntimeError(f"Error {r.status_code}: {r.text}")
+
+    # ------------------------------------------------------------------ #
+    # Envío por Gmail SMTP                                                 #
+    # ------------------------------------------------------------------ #
+
+    def enviar_cfdi_gmail(
+        self,
+        gmail_user: str,
+        app_password: str,
+        remitente: str,
+        destinatario: str,
+        subject: str,
+        body: str,
+        pdf_path: str,
+        xml_path: str,
+        content_type: str = "HTML",
+        logo_path: str = "",
+    ) -> None:
+        """
+        Envía el correo con los archivos CFDI adjuntos usando Gmail SMTP.
+
+        Requiere una Contraseña de aplicación de Google (App Password).
+        Lanza RuntimeError si el envío falla.
+        """
+        import smtplib
+        import ssl
+        from email import encoders
+        from email.mime.base import MIMEBase
+        from email.mime.image import MIMEImage
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+
+        if not gmail_user or not app_password:
+            raise RuntimeError(
+                "Credenciales de Gmail incompletas. "
+                "Abre ⚙ y configura el correo Gmail y la Contraseña de aplicación."
+            )
+
+        root = MIMEMultipart("mixed")
+        root["Subject"] = subject
+        root["From"] = remitente or gmail_user
+        root["To"] = destinatario
+
+        has_logo = bool(logo_path) and Path(logo_path).exists()
+        if has_logo:
+            related = MIMEMultipart("related")
+            subtype = "html" if content_type == "HTML" else "plain"
+            related.attach(MIMEText(body, subtype, "utf-8"))
+            with open(logo_path, "rb") as f:
+                logo_data = f.read()
+            logo_part = MIMEImage(logo_data)
+            logo_part.add_header("Content-ID", f"<{self.LOGO_CID}>")
+            logo_part.add_header("Content-Disposition", "inline",
+                                 filename=Path(logo_path).name)
+            related.attach(logo_part)
+            root.attach(related)
+        else:
+            subtype = "html" if content_type == "HTML" else "plain"
+            root.attach(MIMEText(body, subtype, "utf-8"))
+
+        for path in [pdf_path, xml_path]:
+            if not path:
+                continue
+            with open(path, "rb") as f:
+                part = MIMEBase("application", "octet-stream")
+                part.set_payload(f.read())
+            encoders.encode_base64(part)
+            part.add_header("Content-Disposition", "attachment",
+                            filename=Path(path).name)
+            root.attach(part)
+
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
+            smtp.ehlo()
+            smtp.starttls(context=ctx)
+            smtp.login(gmail_user, app_password)
+            smtp.sendmail(gmail_user, destinatario, root.as_bytes())

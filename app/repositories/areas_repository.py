@@ -21,7 +21,7 @@ class AreasRepository:
         """
         return Areas(
             id_area=row.id_area,
-            nombre=row.nombre,
+            nombre=(row.nombre or "").strip(),
             nombre_legal=getattr(row, "nombre_legal", None),
             rfc=getattr(row, "rfc", None),
             correo_remitente=getattr(row, "correo_remitente", None),

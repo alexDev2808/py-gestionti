@@ -39,8 +39,20 @@ class NominaEnvioView(View):
             label="Razón social",
             width=240,
             options=[],
+            on_select=self._on_area_change,
         )
-        self._dd_area.on_change = self._on_area_change
+
+        self._dd_tipo_nomina = ft.Dropdown(
+            label="Tipo de nómina",
+            width=170,
+            visible=False,
+            options=[
+                ft.dropdown.Option("semanal", "Semanal"),
+                ft.dropdown.Option("quincenal", "Quincena"),
+                ft.dropdown.Option("promotoria", "Promotoria"),
+            ],
+        )
+        self._top_row: Optional[ft.Row] = None
 
         _hoy = date.today()
         _jan1 = date(_hoy.year, 1, 1)
@@ -146,18 +158,7 @@ class NominaEnvioView(View):
                 spacing=16,
                 scroll=ft.ScrollMode.AUTO,
                 controls=[
-                    ft.Row(
-                        spacing=12,
-                        wrap=True,
-                        controls=[
-                            self._dd_area,
-                            self._tf_anio,
-                            self._tf_semana,
-                            self._btn_escanear,
-                            self._btn_config,
-                            self._btn_plantilla,
-                        ],
-                    ),
+                    self._build_top_row(),
                     self._progress,
                     self._status_text,
                     self._banner_sin_correo,
@@ -170,6 +171,26 @@ class NominaEnvioView(View):
                 ],
             ),
         )
+
+    def _build_top_row(self) -> ft.Row:
+        self._top_row = ft.Row(
+            spacing=12,
+            wrap=True,
+            controls=[
+                self._dd_area,
+                self._tf_anio,
+                self._tf_semana,
+                self._dd_tipo_nomina,
+                self._btn_escanear,
+                self._btn_config,
+                self._btn_plantilla,
+            ],
+        )
+        return self._top_row
+
+    def _set_tipo_visible(self, visible: bool) -> None:
+        self._dd_tipo_nomina.visible = visible
+        self._safe_update()
 
     def on_enter(self) -> None:
         if not self._areas:
@@ -201,6 +222,7 @@ class NominaEnvioView(View):
                 if areas:
                     preferida = next((a for a in areas if a.nombre == "Manufacturas Bancor"), areas[0])
                     self._dd_area.value = preferida.nombre
+                    self._set_tipo_visible(preferida.nombre.strip().upper() == "TAURUS")
             except Exception as exc:
                 self._set_status(f"Error al cargar áreas: {exc}")
             finally:
@@ -213,6 +235,10 @@ class NominaEnvioView(View):
             self.page.run_task(_load)
 
     def _on_area_change(self, e: ft.ControlEvent) -> None:
+        es_taurus = (self._dd_area.value or "").strip().upper() == "TAURUS"
+        self._set_tipo_visible(es_taurus)
+        if not es_taurus:
+            self._dd_tipo_nomina.value = None
         # Limpiar resultados del escaneo anterior al cambiar de área
         self._items = []
         self._rows_container.controls = []
@@ -253,6 +279,7 @@ class NominaEnvioView(View):
         firma = self._ctrl.get_firma_area(area.id_area)
         logo = self._ctrl.get_logo_area(area.id_area)
         logo_w = self._ctrl.get_logo_width_area(area.id_area)
+        taurus_rutas = self._ctrl.get_taurus_rutas() if area.nombre.strip().upper() == "TAURUS" else {}
         self._modal = NominaConfigModal(
             page=self.page,
             area=area,
@@ -262,6 +289,7 @@ class NominaEnvioView(View):
             logo_width=logo_w,
             on_save=self._guardar_config,
             on_cancel=self._cerrar_modal,
+            taurus_rutas=taurus_rutas,
         )
         self.page.show_dialog(self._modal.dialog)
 
@@ -281,15 +309,21 @@ class NominaEnvioView(View):
                     values["correo_remitente"],
                     values["ruta_cfdi"],
                     values["prefijo_carpeta"],
-                    values["tenant_id"],
-                    values["client_id"],
-                    values["client_secret"],
+                    values.get("metodo", "graph"),
+                    values.get("tenant_id", ""),
+                    values.get("client_id", ""),
+                    values.get("client_secret", ""),
+                    values.get("app_password", ""),
                     values.get("firma_html", ""),
                     values.get("logo_path", ""),
                     values.get("logo_width", 240),
                     values.get("nombre_legal", ""),
                 )
                 if ok:
+                    if area.nombre.strip().upper() == "TAURUS" and values.get("taurus_rutas"):
+                        await asyncio.to_thread(
+                            self._ctrl.set_taurus_rutas, values["taurus_rutas"]
+                        )
                     self._show_snackbar("Configuración guardada.")
                     await asyncio.to_thread(self._cargar_areas_silencioso)
                 else:
@@ -361,7 +395,22 @@ class NominaEnvioView(View):
             self._show_snackbar("Año o semana no válidos.", error=True)
             return
 
-        if not area.ruta_cfdi:
+        if area.nombre.strip().upper() == "TAURUS":
+            tipo = self._dd_tipo_nomina.value
+            if not tipo:
+                self._show_snackbar("Selecciona el tipo de nómina (Semanal, Quincena, Promotoria).", error=True)
+                return
+            rutas = self._ctrl.get_taurus_rutas()
+            ruta_tipo = rutas.get(tipo, "")
+            if not ruta_tipo:
+                self._show_snackbar(
+                    f"No hay ruta configurada para {tipo}. Usa el botón ⚙ para configurarla.",
+                    error=True,
+                )
+                return
+            from dataclasses import replace as _dc_replace
+            area = _dc_replace(area, ruta_cfdi=ruta_tipo)
+        elif not area.ruta_cfdi:
             self._show_snackbar(
                 "El área no tiene configurada la ruta CFDI. Usa el botón ⚙ para configurarla.",
                 error=True,

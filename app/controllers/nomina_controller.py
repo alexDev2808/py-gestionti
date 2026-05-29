@@ -44,9 +44,11 @@ class NominaController:
         correo_remitente: str,
         ruta_cfdi: str,
         prefijo_carpeta: str,
-        tenant_id: str,
-        client_id: str,
-        client_secret: str,
+        metodo: str = "graph",
+        tenant_id: str = "",
+        client_id: str = "",
+        client_secret: str = "",
+        app_password: str = "",
         firma_html: str = "",
         logo_path: str = "",
         logo_width: int = 240,
@@ -64,9 +66,14 @@ class NominaController:
         if not ok:
             return False, msg
 
-        if tenant_id or client_id or client_secret:
-            settings.set_nomina_credentials(id_area, tenant_id.strip(), client_id.strip(), client_secret.strip())
-
+        settings.set_nomina_credentials(
+            id_area,
+            metodo=metodo,
+            tenant_id=tenant_id.strip(),
+            client_id=client_id.strip(),
+            client_secret=client_secret.strip(),
+            app_password=app_password.strip(),
+        )
         settings.set_nomina_firma(id_area, firma_html or "")
         settings.set_nomina_logo(id_area, (logo_path or "").strip())
         settings.set_nomina_logo_width(id_area, logo_width)
@@ -91,6 +98,12 @@ class NominaController:
     def guardar_plantilla(self, plantilla: dict) -> None:
         settings.set_nomina_plantilla(plantilla)
 
+    def get_taurus_rutas(self) -> dict:
+        return settings.get_nomina_taurus_rutas()
+
+    def set_taurus_rutas(self, rutas: dict) -> None:
+        settings.set_nomina_taurus_rutas(rutas)
+
     # ------------------------------------------------------------------ #
     # Escaneo de carpeta                                                   #
     # ------------------------------------------------------------------ #
@@ -109,10 +122,16 @@ class NominaController:
         pares = self._nomina_service.scan_carpeta(carpeta)
 
         es_logym = "logym" in area.nombre.lower()
+        es_taurus = "taurus" in area.nombre.lower()
         items: list[NominaItem] = []
         for pdf_path, xml_path, num_empleado in pares:
-            # Logym: 141 → 0141L  |  MBancor: 141 → 141
-            num_empleado_db = f"0{num_empleado}L" if es_logym else num_empleado
+            # Logym: 141 → 0141L  |  Taurus: 141 → 0141T  |  otros: 141 → 141
+            if es_logym:
+                num_empleado_db = f"0{num_empleado}L"
+            elif es_taurus:
+                num_empleado_db = f"0{num_empleado}T"
+            else:
+                num_empleado_db = num_empleado
             personal = self._personal_repo.get_by_num_empleado(num_empleado_db)
             if not personal:
                 items.append(NominaItem(
@@ -226,19 +245,34 @@ class NominaController:
         )
 
         try:
-            self._nomina_service.enviar_cfdi(
-                tenant_id=creds.get("tenant_id", ""),
-                client_id=creds.get("client_id", ""),
-                client_secret=creds.get("client_secret", ""),
-                remitente=area.correo_remitente or "",
-                destinatario=item.correo,
-                subject=subject,
-                body=body,
-                pdf_path=item.pdf_path,
-                xml_path=item.xml_path,
-                content_type=content_type,
-                logo_path=logo_path if tiene_logo else "",
-            )
+            metodo = creds.get("metodo", "graph")
+            if metodo == "gmail":
+                self._nomina_service.enviar_cfdi_gmail(
+                    gmail_user=area.correo_remitente or "",
+                    app_password=creds.get("app_password", ""),
+                    remitente=area.correo_remitente or "",
+                    destinatario=item.correo,
+                    subject=subject,
+                    body=body,
+                    pdf_path=item.pdf_path,
+                    xml_path=item.xml_path,
+                    content_type=content_type,
+                    logo_path=logo_path if tiene_logo else "",
+                )
+            else:
+                self._nomina_service.enviar_cfdi_graph(
+                    tenant_id=creds.get("tenant_id", ""),
+                    client_id=creds.get("client_id", ""),
+                    client_secret=creds.get("client_secret", ""),
+                    remitente=area.correo_remitente or "",
+                    destinatario=item.correo,
+                    subject=subject,
+                    body=body,
+                    pdf_path=item.pdf_path,
+                    xml_path=item.xml_path,
+                    content_type=content_type,
+                    logo_path=logo_path if tiene_logo else "",
+                )
             self._historial_service.registrar(
                 num_semana=item.num_semana,
                 anio=item.anio,
