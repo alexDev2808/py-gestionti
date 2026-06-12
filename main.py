@@ -47,6 +47,7 @@ from app.views.roles_proveedores_view import RolesProveedoresView
 from app.views.proveedores_view import ProveedoresView
 from app.views.facturas_view import FacturasView
 from app.views.separar_pdf_view import SepararPdfView
+from app.views.comprimir_pdf_view import ComprimirPdfView
 from app.views.importar_correos_nomina_view import ImportarCorreosNominaView
 from app.views.profile_view import ProfileView
 from app.views.about_view import AboutView
@@ -390,6 +391,12 @@ def main(page: ft.Page):
             required_permission=PERM_UTILIDADES_VIEW,
         )
         registry.register(
+            ComprimirPdfView,
+            icon=ft.Icons.COMPRESS,
+            selected_icon=ft.Icons.COMPRESS,
+            required_permission=PERM_UTILIDADES_VIEW,
+        )
+        registry.register(
             ImportarCorreosNominaView,
             icon=ft.Icons.MARK_EMAIL_READ_OUTLINED,
             selected_icon=ft.Icons.MARK_EMAIL_READ,
@@ -488,7 +495,7 @@ def main(page: ft.Page):
         # ProfileView se accede por el botón "Perfil" del footer, no como ítem de nav.
         _group_keys = {RolesProveedoresView.key, ProveedoresView.key}
         _nomina_keys = {NominaEnvioView.key, NominaHistorialView.key}
-        _utilidades_keys = {SepararPdfView.key, ImportarCorreosNominaView.key}
+        _utilidades_keys = {SepararPdfView.key, ComprimirPdfView.key, ImportarCorreosNominaView.key}
         _hidden_keys = {ProfileView.key}
         _regular_items = []
         _alertas_items = []

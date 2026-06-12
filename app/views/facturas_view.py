@@ -14,8 +14,11 @@ from app.components.facturas_destinatarios_modal import FacturasDestinatariosMod
 from app.components.facturas_import_modal import FacturasImportModal
 from app.controllers.facturas_controller import FacturasController
 from app.dto.Facturas.facturas_response_dto import FacturasResponseDTO
+from app.services.facturas_zip_importer import MESES_ES
 from app.services.permissions import PERM_FACTURAS_EDIT
 from app.views.base import View
+
+_ORDEN_MES = {m: i for i, m in enumerate(MESES_ES)}
 
 
 def _fmt_dt(d) -> str:
@@ -107,6 +110,8 @@ class FacturasView(View):
         self._sel_proveedor: Optional[int] = None
         self._sel_cliente: Optional[int] = None
         self._search_text: str = ""
+        self._sel_mes_filtro: Optional[str] = None
+        self._sel_anio_filtro: Optional[int] = None
 
         self._chrome_offset: int = 260
         self._min_table_height: int = 240
@@ -214,6 +219,18 @@ class FacturasView(View):
             visible=False, icon_size=18,
             on_click=lambda _: self._limpiar_busqueda(),
         )
+        self._periodo_chips_row = ft.Row(spacing=6, scroll=ft.ScrollMode.AUTO)
+        self._mes_filter_row = ft.Row(
+            spacing=8,
+            visible=False,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[
+                ft.Icon(ft.Icons.CALENDAR_MONTH_OUTLINED, size=16,
+                        color=ft.Colors.ON_SURFACE_VARIANT),
+                ft.Text("Período:", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                ft.Container(expand=True, content=self._periodo_chips_row),
+            ],
+        )
 
     # ---------- Lifecycle ----------
 
@@ -317,6 +334,7 @@ class FacturasView(View):
                     ],
                 ),
                 buscador_row,
+                self._mes_filter_row,
                 acciones_row,
             ],
         )
@@ -350,6 +368,7 @@ class FacturasView(View):
             expand=True,
             content=ft.Column(
                 expand=True,
+                scroll=ft.ScrollMode.AUTO,
                 spacing=10,
                 horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
                 controls=[toolbar, self._progress, self._table_card],
@@ -528,6 +547,9 @@ class FacturasView(View):
 
     def _seleccionar(self, filial: Optional[int] = None, proveedor: Optional[int] = None,
                      cliente: Optional[int] = None) -> None:
+        if cliente != self._sel_cliente:
+            self._sel_mes_filtro = None
+            self._sel_anio_filtro = None
         self._sel_filial = filial
         self._sel_proveedor = proveedor
         self._sel_cliente = cliente
@@ -550,6 +572,12 @@ class FacturasView(View):
         self._btn_nuevo_prov.disabled = not filial_sel
 
         can_edit = self.can(PERM_FACTURAS_EDIT)
+        if cliente_sel:
+            self._mes_filter_row.visible = True
+            self._actualizar_opciones_periodo()
+        else:
+            self._mes_filter_row.visible = False
+
         if cliente_sel and can_edit:
             pendientes = self._facturas_pendientes_cliente()
             self._btn_enviar_lote.text = f"Enviar todas ({len(pendientes)})"
@@ -567,13 +595,15 @@ class FacturasView(View):
             self._btn_eliminar_lote.disabled = True
 
     def _facturas_cliente(self) -> list[FacturasResponseDTO]:
-        """Todas las facturas del cliente seleccionado (cualquier estado)."""
+        """Facturas del cliente seleccionado, con filtro de período aplicado."""
         if self._sel_cliente is None:
             return []
-        return [
-            f for f in self._ctrl.facturas_list
-            if f.id_factcli == self._sel_cliente
-        ]
+        result = [f for f in self._ctrl.facturas_list if f.id_factcli == self._sel_cliente]
+        if self._sel_mes_filtro:
+            result = [f for f in result if (f.mes or "").lower() == self._sel_mes_filtro.lower()]
+        if self._sel_anio_filtro:
+            result = [f for f in result if f.anio == self._sel_anio_filtro]
+        return result
 
     def _facturas_pendientes_cliente(self) -> list[FacturasResponseDTO]:
         """Pendientes (estado != 'enviada') del cliente seleccionado."""
@@ -600,6 +630,65 @@ class FacturasView(View):
         self._search_field.value = ""
         self._btn_limpiar_busqueda.visible = False
         self._render_tabla()
+        self._safe_update()
+
+    # ---------- Filtro de período ----------
+
+    def _build_chip(self, label: str, selected: bool, on_click) -> ft.Control:
+        bg = ft.Colors.PRIMARY_CONTAINER if selected else ft.Colors.SURFACE_CONTAINER_HIGH
+        fg = ft.Colors.ON_PRIMARY_CONTAINER if selected else ft.Colors.ON_SURFACE_VARIANT
+        return ft.Container(
+            bgcolor=bg,
+            border_radius=16,
+            padding=ft.padding.symmetric(horizontal=12, vertical=6),
+            ink=True,
+            on_click=on_click,
+            content=ft.Text(label, size=12, color=fg, weight=ft.FontWeight.W_500, no_wrap=True),
+        )
+
+    def _actualizar_opciones_periodo(self) -> None:
+        """Reconstruye los chips de período con los meses presentes en las facturas del cliente."""
+        if self._sel_cliente is None:
+            return
+        todas = [f for f in self._ctrl.facturas_list if f.id_factcli == self._sel_cliente]
+        periodos = sorted(
+            {(f.mes, f.anio) for f in todas if f.mes and f.anio},
+            key=lambda p: (p[1], _ORDEN_MES.get(p[0], 99)),
+        )
+        if self._sel_mes_filtro and (self._sel_mes_filtro, self._sel_anio_filtro) not in periodos:
+            self._sel_mes_filtro = None
+            self._sel_anio_filtro = None
+
+        chips: list[ft.Control] = [
+            self._build_chip(
+                "Todos", selected=(self._sel_mes_filtro is None),
+                on_click=lambda _: self._limpiar_filtro_periodo(),
+            )
+        ]
+        for mes, anio in periodos:
+            es_sel = (self._sel_mes_filtro == mes and self._sel_anio_filtro == anio)
+            chips.append(self._build_chip(
+                f"{mes} {anio}", selected=es_sel,
+                on_click=lambda _, m=mes, a=anio: self._seleccionar_periodo(m, a),
+            ))
+        self._periodo_chips_row.controls = chips
+        try:
+            self._periodo_chips_row.update()
+        except Exception:
+            pass
+
+    def _seleccionar_periodo(self, mes: str, anio: int) -> None:
+        self._sel_mes_filtro = mes
+        self._sel_anio_filtro = anio
+        self._render_tabla()
+        self._actualizar_botones_seleccion()
+        self._safe_update()
+
+    def _limpiar_filtro_periodo(self) -> None:
+        self._sel_mes_filtro = None
+        self._sel_anio_filtro = None
+        self._render_tabla()
+        self._actualizar_botones_seleccion()
         self._safe_update()
 
     def _aplicar_busqueda(
@@ -658,6 +747,12 @@ class FacturasView(View):
         if self._sel_cliente is not None:
             cli = next((c for c in self._ctrl.clientes_list if c.id_factcli == self._sel_cliente), None)
             label = f"{cli.filial_nombre} / {cli.proveedor_nombre} / {cli.nombre}" if cli else "Cliente"
+            periodo_partes = [p for p in [
+                self._sel_mes_filtro,
+                str(self._sel_anio_filtro) if self._sel_anio_filtro else "",
+            ] if p]
+            if periodo_partes:
+                label += f" — {' '.join(periodo_partes)}"
         elif self._sel_proveedor is not None:
             prov = next((p for p in self._ctrl.proveedores_list if p.id_factprov == self._sel_proveedor), None)
             label = f"{prov.filial_nombre} / {prov.nombre}" if prov else "Proveedor"
