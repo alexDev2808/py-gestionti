@@ -464,6 +464,8 @@ class FacturasView(View):
                     selected=(self._sel_proveedor == prov.id_factprov and self._sel_cliente is None),
                     on_click=lambda p=prov: self._seleccionar(filial=p.id_filial, proveedor=p.id_factprov),
                     trailing_count=len([f for f in self._ctrl.facturas_list if f.id_factprov == prov.id_factprov]),
+                    on_edit=lambda p=prov: self._editar_nombre_proveedor(p) if self.can(PERM_FACTURAS_EDIT) else None,
+                    on_delete=lambda p=prov: self._confirmar_eliminar_proveedor(p) if self.can(PERM_FACTURAS_EDIT) else None,
                 ))
                 for cli in clientes:
                     controls.append(self._tree_node(
@@ -478,7 +480,8 @@ class FacturasView(View):
         self._tree_container.controls = controls
 
     def _tree_node(self, label: str, icon: str, level: int, selected: bool,
-                   on_click, trailing_count: Optional[int] = None, on_edit=None) -> ft.Control:
+                   on_click, trailing_count: Optional[int] = None, on_edit=None,
+                   on_delete=None) -> ft.Control:
         bg = ft.Colors.PRIMARY_CONTAINER if selected else ft.Colors.TRANSPARENT
         fg = ft.Colors.ON_PRIMARY_CONTAINER if selected else ft.Colors.ON_SURFACE
         weight = ft.FontWeight.W_600 if (selected or level == 0) else ft.FontWeight.W_400
@@ -490,6 +493,15 @@ class FacturasView(View):
                 tooltip="Renombrar",
                 icon_color=ft.Colors.ON_SURFACE_VARIANT,
                 on_click=lambda _, fn=on_edit: fn(),
+                style=ft.ButtonStyle(padding=ft.padding.all(4)),
+            ))
+        if on_delete is not None:
+            trailing_controls.append(ft.IconButton(
+                icon=ft.Icons.DELETE_OUTLINE,
+                icon_size=14,
+                tooltip="Eliminar",
+                icon_color=ft.Colors.ERROR,
+                on_click=lambda _, fn=on_delete: fn(),
                 style=ft.ButtonStyle(padding=ft.padding.all(4)),
             ))
         if trailing_count is not None:
@@ -1074,6 +1086,90 @@ class FacturasView(View):
             actions=[
                 ft.TextButton("Cancelar", on_click=lambda _: cerrar()),
                 ft.FilledButton("Guardar", icon=ft.Icons.CHECK, on_click=confirmar),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        if dlg not in self.page.overlay:
+            self.page.overlay.append(dlg)
+        dlg.open = True
+        self._safe_update()
+
+    def _editar_nombre_proveedor(self, prov) -> None:
+        tf_nombre = ft.TextField(
+            label="Nombre del proveedor", value=prov.nombre, autofocus=True, width=380,
+        )
+
+        def cerrar() -> None:
+            dlg.open = False
+            self._safe_update()
+
+        def confirmar(_: ft.ControlEvent) -> None:
+            nombre = (tf_nombre.value or "").strip()
+            if not nombre:
+                tf_nombre.error_text = "Ingresa un nombre."
+                self._safe_update()
+                return
+            cerrar()
+            ok, msg = self._ctrl.renombrar_proveedor(prov.id_factprov, prov.id_filial, nombre)
+            self._snackbar(f"{'✓' if ok else '✗'} {msg or 'Proveedor actualizado.'}", error=not ok)
+            if ok:
+                self._cargar_todo()
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text(f"Renombrar proveedor — {prov.filial_nombre}"),
+            content=ft.Container(width=400, content=tf_nombre),
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda _: cerrar()),
+                ft.FilledButton("Guardar", icon=ft.Icons.CHECK, on_click=confirmar),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        if dlg not in self.page.overlay:
+            self.page.overlay.append(dlg)
+        dlg.open = True
+        self._safe_update()
+
+    def _confirmar_eliminar_proveedor(self, prov) -> None:
+        clientes = self._ctrl.clientes_por_proveedor(prov.id_factprov)
+        facturas_count = len([f for f in self._ctrl.facturas_list if f.id_factprov == prov.id_factprov])
+
+        advertencia = ""
+        if clientes:
+            advertencia += f"\nTiene {len(clientes)} cliente(s) asociado(s)."
+        if facturas_count:
+            advertencia += f"\nTiene {facturas_count} factura(s) registrada(s)."
+        if advertencia:
+            advertencia = "\n⚠ Advertencia:" + advertencia
+
+        def cerrar() -> None:
+            dlg.open = False
+            self._safe_update()
+
+        def confirmar(_: ft.ControlEvent) -> None:
+            cerrar()
+            ok, msg = self._ctrl.eliminar_proveedor(prov.id_factprov)
+            self._snackbar(f"{'✓' if ok else '✗'} {msg or 'Proveedor eliminado.'}", error=not ok)
+            if ok:
+                if self._sel_proveedor == prov.id_factprov:
+                    self._sel_proveedor = None
+                    self._sel_cliente = None
+                self._cargar_todo()
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Eliminar proveedor"),
+            content=ft.Text(
+                f"¿Seguro que deseas eliminar el proveedor '{prov.nombre}' "
+                f"de {prov.filial_nombre}?{advertencia}"
+            ),
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda _: cerrar()),
+                ft.FilledButton(
+                    "Eliminar",
+                    on_click=confirmar,
+                    style=ft.ButtonStyle(bgcolor=ft.Colors.ERROR),
+                ),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
         )

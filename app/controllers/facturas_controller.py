@@ -136,6 +136,17 @@ class FacturasController:
         ok, msg, _ = self.clientes.crear(FacturaClientesCreateDTO(id_factprov=id_factprov, nombre=nombre))
         return ok, msg
 
+    def renombrar_proveedor(self, id_factprov: int, id_filial: int, nuevo_nombre: str) -> tuple[bool, str]:
+        from app.dto.FacturaProveedores.factura_proveedores_update_dto import FacturaProveedoresUpdateDTO
+        ok, msg, _ = self.proveedores.actualizar(
+            id_factprov, FacturaProveedoresUpdateDTO(id_factprov=id_factprov, id_filial=id_filial, nombre=nuevo_nombre)
+        )
+        return ok, msg
+
+    def eliminar_proveedor(self, id_factprov: int) -> tuple[bool, str]:
+        ok, msg, _ = self.proveedores.eliminar(id_factprov)
+        return ok, msg
+
     def renombrar_cliente(self, id_factcli: int, id_factprov: int, nuevo_nombre: str) -> tuple[bool, str]:
         from app.dto.FacturaClientes.factura_clientes_update_dto import FacturaClientesUpdateDTO
         ok, msg, _ = self.clientes.actualizar(
