@@ -10,6 +10,7 @@ class FacturaClientes:
     id_factprov: int
     nombre: str
     correos_destino: str = ""
+    correos_copia: str = ""
     ruta_descarga: str = ""
     email_asunto: str = ""
     email_cuerpo: str = ""

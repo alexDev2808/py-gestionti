@@ -23,6 +23,7 @@ class FacturaClientesService:
             id_factprov=m.id_factprov,
             nombre=m.nombre,
             correos_destino=m.correos_destino,
+            correos_copia=m.correos_copia,
             ruta_descarga=m.ruta_descarga,
             email_asunto=m.email_asunto,
             email_cuerpo=m.email_cuerpo,
@@ -41,6 +42,7 @@ class FacturaClientesService:
         self,
         id_factcli: int,
         correos: str,
+        correos_copia: str,
         ruta_descarga: str,
         email_asunto: str,
         email_cuerpo: str,
@@ -50,6 +52,7 @@ class FacturaClientesService:
         if not self.repository.actualizar_config(
             id_factcli,
             correos.strip(),
+            correos_copia.strip(),
             ruta_descarga.strip(),
             email_asunto.strip(),
             email_cuerpo,

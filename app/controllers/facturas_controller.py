@@ -162,12 +162,13 @@ class FacturasController:
         self,
         id_factcli: int,
         correos: str,
+        correos_copia: str,
         ruta_descarga: str,
         email_asunto: str,
         email_cuerpo: str,
     ) -> tuple[bool, str]:
         ok, msg, _ = self.clientes.actualizar_config(
-            id_factcli, correos, ruta_descarga, email_asunto, email_cuerpo,
+            id_factcli, correos, correos_copia, ruta_descarga, email_asunto, email_cuerpo,
         )
         return ok, msg
 
@@ -388,7 +389,8 @@ class FacturasController:
                 plantilla_cuerpo=plantilla_cuerpo,
             )
 
-        resultado = self.email.enviar(destinos, asunto, cuerpo, adjuntos)
+        cc = cliente.correos_copia if cliente else ""
+        resultado = self.email.enviar(destinos, asunto, cuerpo, adjuntos, cc=cc)
         if resultado.ok:
             self.facturas.marcar_enviada(item.id_factura, destinos)
             return True, resultado.mensaje
@@ -489,7 +491,8 @@ class FacturasController:
             plantilla_cuerpo=plantilla_cuerpo,
         )
 
-        resultado = self.email.enviar(destinos, asunto, cuerpo, adjuntos)
+        cc = cliente.correos_copia if cliente else ""
+        resultado = self.email.enviar(destinos, asunto, cuerpo, adjuntos, cc=cc)
         if resultado.ok:
             for f in grupo:
                 self.facturas.marcar_enviada(f.id_factura, destinos)

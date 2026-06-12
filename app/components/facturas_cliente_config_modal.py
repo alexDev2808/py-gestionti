@@ -48,6 +48,15 @@ class FacturasClienteConfigModal:
             width=480,
             hint_text="ejemplo1@dominio.com; ejemplo2@dominio.com",
         )
+        self._tf_copia = ft.TextField(
+            label="Correos en copia — CC (separados por ; o ,)",
+            value=cliente.correos_copia or "",
+            multiline=True,
+            min_lines=1,
+            max_lines=3,
+            width=480,
+            hint_text="copia1@dominio.com; copia2@dominio.com",
+        )
 
         self._tf_ruta = ft.TextField(
             label="Ruta de descarga (carpeta base)",
@@ -97,6 +106,9 @@ class FacturasClienteConfigModal:
                         ft.Text("Correos destino", size=13, weight=ft.FontWeight.W_600,
                                 color=ft.Colors.ON_SURFACE_VARIANT),
                         self._tf_correos,
+                        ft.Text("Correos en copia (CC)", size=13, weight=ft.FontWeight.W_600,
+                                color=ft.Colors.ON_SURFACE_VARIANT),
+                        self._tf_copia,
                         ft.Divider(height=1),
                         ft.Text("Ruta de descarga", size=13, weight=ft.FontWeight.W_600,
                                 color=ft.Colors.ON_SURFACE_VARIANT),
@@ -157,6 +169,7 @@ class FacturasClienteConfigModal:
             return
         self._on_save({
             "correos": self._tf_correos.value or "",
+            "correos_copia": self._tf_copia.value or "",
             "ruta_descarga": (self._tf_ruta.value or "").strip(),
             "email_asunto": asunto,
             "email_cuerpo": cuerpo,

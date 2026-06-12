@@ -226,6 +226,7 @@ class FacturasEmailService:
         asunto: str,
         cuerpo_html: str,
         adjuntos: list[Path],
+        cc: str = "",
     ) -> ResultadoEnvio:
         emails = _normalizar_destinatarios(destinatarios)
         if not emails:
@@ -254,6 +255,9 @@ class FacturasEmailService:
             outlook = win32com.client.Dispatch("Outlook.Application")
             mail = outlook.CreateItem(0)  # 0 = olMailItem
             mail.To = "; ".join(emails)
+            cc_emails = _normalizar_destinatarios(cc)
+            if cc_emails:
+                mail.CC = "; ".join(cc_emails)
             mail.Subject = asunto
             mail.HTMLBody = cuerpo_html
             for adj in adjuntos_validos:

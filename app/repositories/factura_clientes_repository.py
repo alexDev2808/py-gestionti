@@ -12,6 +12,7 @@ class FacturaClientesRepository:
     _BASE_SELECT = """
         SELECT c.id_factcli, c.id_factprov, c.nombre,
                ISNULL(c.correos_destino, '') AS correos_destino,
+               ISNULL(c.correos_copia, '')   AS correos_copia,
                ISNULL(c.ruta_descarga, '')   AS ruta_descarga,
                ISNULL(c.email_asunto, '')    AS email_asunto,
                ISNULL(c.email_cuerpo, '')    AS email_cuerpo,
@@ -28,6 +29,7 @@ class FacturaClientesRepository:
             id_factprov=row.id_factprov,
             nombre=row.nombre or "",
             correos_destino=row.correos_destino or "",
+            correos_copia=row.correos_copia or "",
             ruta_descarga=row.ruta_descarga or "",
             email_asunto=row.email_asunto or "",
             email_cuerpo=row.email_cuerpo or "",
@@ -93,6 +95,7 @@ class FacturaClientesRepository:
         self,
         id_factcli: int,
         correos: str,
+        correos_copia: str,
         ruta_descarga: str,
         email_asunto: str,
         email_cuerpo: str,
@@ -100,6 +103,7 @@ class FacturaClientesRepository:
         query = """
             UPDATE FacturaClientes
             SET correos_destino = ?,
+                correos_copia   = ?,
                 ruta_descarga   = ?,
                 email_asunto    = ?,
                 email_cuerpo    = ?
@@ -107,7 +111,7 @@ class FacturaClientesRepository:
         """
         with get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(query, (correos, ruta_descarga, email_asunto, email_cuerpo, id_factcli))
+            cursor.execute(query, (correos, correos_copia, ruta_descarga, email_asunto, email_cuerpo, id_factcli))
             affected = cursor.rowcount
             conn.commit()
         return affected > 0

@@ -1294,6 +1294,7 @@ class FacturasView(View):
             ok, msg = self._ctrl.actualizar_config_cliente(
                 cliente.id_factcli,
                 values.get("correos", ""),
+                values.get("correos_copia", ""),
                 values.get("ruta_descarga", ""),
                 values.get("email_asunto", ""),
                 values.get("email_cuerpo", ""),
