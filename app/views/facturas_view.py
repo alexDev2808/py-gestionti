@@ -579,10 +579,11 @@ class FacturasView(View):
             self._mes_filter_row.visible = False
 
         if cliente_sel and can_edit:
-            pendientes = self._facturas_pendientes_cliente()
-            self._btn_enviar_lote.text = f"Enviar todas ({len(pendientes)})"
+            # Con período seleccionado se habilita reenvío aunque ya estén enviadas.
+            para_enviar = self._facturas_cliente() if self._sel_mes_filtro else self._facturas_pendientes_cliente()
+            self._btn_enviar_lote.text = f"Enviar todas ({len(para_enviar)})"
             self._btn_enviar_lote.visible = True
-            self._btn_enviar_lote.disabled = len(pendientes) == 0
+            self._btn_enviar_lote.disabled = len(para_enviar) == 0
 
             todas = self._facturas_cliente()
             self._btn_eliminar_lote.text = f"Eliminar todas ({len(todas)})"
@@ -742,6 +743,10 @@ class FacturasView(View):
             id_factprov=self._sel_proveedor,
             id_factcli=self._sel_cliente,
         )
+        if self._sel_mes_filtro:
+            items_base = [f for f in items_base if (f.mes or "").lower() == self._sel_mes_filtro.lower()]
+        if self._sel_anio_filtro:
+            items_base = [f for f in items_base if f.anio == self._sel_anio_filtro]
         items = self._aplicar_busqueda(items_base)
 
         if self._sel_cliente is not None:
@@ -1000,14 +1005,16 @@ class FacturasView(View):
             self.page.run_task(_do)
 
     def _enviar_lote(self) -> None:
-        """Envía todas las facturas pendientes del cliente seleccionado.
+        """Envía todas las facturas del cliente seleccionado.
 
+        Con período activo: envía todas las del período (incluidas ya enviadas, para reenvío).
+        Sin período: solo las pendientes (estado != 'enviada').
         Telcel se agrupa por (mes, año) en un solo correo por grupo; otros
         proveedores se envían individualmente.
         """
-        pendientes = self._facturas_pendientes_cliente()
+        pendientes = self._facturas_cliente() if self._sel_mes_filtro else self._facturas_pendientes_cliente()
         if not pendientes:
-            self._snackbar("No hay facturas pendientes que enviar.", error=True)
+            self._snackbar("No hay facturas que enviar.", error=True)
             return
 
         self._set_progress(True)
