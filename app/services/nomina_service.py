@@ -41,13 +41,15 @@ class NominaService:
 
         Retorna dict con num_razon, anio, num_semana, num_empleado  o  None si no coincide.
         """
+        _TIPOS_VALIDOS = {"semanal", "quincenal", "promotoria"}
         stem = Path(filename).stem
         parts = stem.split("_")
-        if len(parts) < 6 or parts[0].upper() != "RE" or parts[2].lower() != "semanal":
+        if len(parts) < 6 or parts[0].upper() != "RE" or parts[2].lower() not in _TIPOS_VALIDOS:
             return None
         try:
             return {
                 "num_razon": parts[1],
+                "tipo_periodo": parts[2].lower(),
                 "anio": int(parts[3]),
                 "num_semana": int(parts[4]),
                 "num_empleado": parts[5],

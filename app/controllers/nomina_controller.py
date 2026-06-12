@@ -129,7 +129,7 @@ class NominaController:
             if es_logym:
                 num_empleado_db = f"0{num_empleado}L"
             elif es_taurus:
-                num_empleado_db = f"0{num_empleado}T"
+                num_empleado_db = f"{num_empleado.zfill(4)}T"
             else:
                 num_empleado_db = num_empleado
             personal = self._personal_repo.get_by_num_empleado(num_empleado_db)
