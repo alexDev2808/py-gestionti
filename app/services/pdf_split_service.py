@@ -95,7 +95,8 @@ def separar_pdf(
     """Divide cada página en un PDF independiente nombrado `<ABREV>_<TITULAR>.pdf`.
 
     Si dos páginas comparten titular, se agrega sufijo `_2`, `_3`, etc.
-    Si una página no tiene titular, se usa `pagina_<N>`.
+    Si una página no tiene titular, se usa `<ABREV>_<N>.pdf` donde N es un
+    contador secuencial de páginas sin titular.
     `on_progress(actual, total, ultimo_nombre)` se invoca tras cada página.
     """
     pdf_path = Path(pdf_path)
@@ -115,9 +116,14 @@ def separar_pdf(
     res.total = total
     titulares = [extraer_titular(p, indice_titular) for p in reader.pages]
     conteo: dict[str, int] = {}
+    seq_sin_titular = 0
 
     for i, pagina in enumerate(reader.pages):
-        titular = titulares[i] or f"pagina_{i + 1}"
+        if titulares[i]:
+            titular = titulares[i]
+        else:
+            seq_sin_titular += 1
+            titular = str(seq_sin_titular)
         conteo[titular] = conteo.get(titular, 0) + 1
         sufijo = f"_{conteo[titular]}" if conteo[titular] > 1 else ""
         nombre = f"{abrev}_{titular}{sufijo}.pdf"
