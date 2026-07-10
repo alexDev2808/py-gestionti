@@ -4,10 +4,14 @@ from typing import List, Optional
 
 from app.config.database import get_connection
 from app.models.Personal import Personal
+from app.repositories.offline_nomina_repository import OfflineNominaRepository
 
 
 class PersonalRepository:
     """Encapsula todas las operaciones SQL sobre la tabla Personal."""
+
+    def __init__(self, offline_repo: Optional[OfflineNominaRepository] = None):
+        self._offline = offline_repo or OfflineNominaRepository()
 
     def create(self, personal: Personal, password_plain: str, password_hashed: str) -> Personal:
         """
@@ -210,7 +214,17 @@ class PersonalRepository:
         if not row:
             return None
 
-        return self._row_to_personal(row)
+        personal = self._row_to_personal(row)
+        self._offline.cache_personal(
+            num_empleado=personal.num_empleado,
+            nombres=personal.nombres,
+            apellido_paterno=personal.apellido_paterno,
+            apellido_materno=personal.apellido_materno,
+            correo_nomina=personal.correo_nomina,
+            mail=personal.mail,
+            activo=bool(personal.activo),
+        )
+        return personal
 
     def get_credentials(self, num_empleado: str) -> Optional[tuple[Personal, str]]:
         """

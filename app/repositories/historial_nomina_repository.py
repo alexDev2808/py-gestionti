@@ -36,6 +36,7 @@ class HistorialNominaRepository:
         nombre_xml: str,
         estatus: str,
         error_detalle: Optional[str] = None,
+        fecha_hora_envio: Optional[datetime] = None,
     ) -> HistorialNomina:
         query = """
             INSERT INTO HistorialNomina (
@@ -45,7 +46,7 @@ class HistorialNominaRepository:
             OUTPUT INSERTED.id
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
-        now = datetime.now()
+        now = fecha_hora_envio or datetime.now()
         with get_connection() as conn:
             cursor = conn.cursor()
             row = cursor.execute(query, (

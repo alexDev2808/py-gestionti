@@ -19,3 +19,4 @@ class HistorialNominaResponseDTO:
     fecha_hora_envio: datetime
     estatus: str
     error_detalle: Optional[str] = None
+    pendiente_sync: bool = False

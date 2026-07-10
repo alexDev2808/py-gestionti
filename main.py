@@ -2,8 +2,10 @@ import flet as ft
 
 from app.config.database import set_connection_error_callback
 from app.config.migrations import run_migrations
+from app.config.offline_store import bootstrap_offline_store
 from app.config.theme import configure_page
 from app.services.updater_service import ReleaseInfo, check_for_update, download_and_install
+from app.components.connection_status_dot import ConnectionStatusDot
 from app.components.main_layout import MainLayout
 from app.components.theme_toggle import ThemeToggleButton
 from app.components.side_menu import SideMenu, MenuItem, MenuGroup
@@ -48,6 +50,7 @@ from app.views.proveedores_view import ProveedoresView
 from app.views.facturas_view import FacturasView
 from app.views.separar_pdf_view import SepararPdfView
 from app.views.comprimir_pdf_view import ComprimirPdfView
+from app.views.unir_pdf_view import UnirPdfView
 from app.views.importar_correos_nomina_view import ImportarCorreosNominaView
 from app.views.profile_view import ProfileView
 from app.views.about_view import AboutView
@@ -198,77 +201,44 @@ def main(page: ft.Page):
         run_migrations()
     except Exception as exc:
         print(f"[main] Migraciones fallaron: {exc}")
+    try:
+        bootstrap_offline_store()
+    except Exception as exc:
+        print(f"[main] No se pudo inicializar el almacén offline: {exc}")
     _start_update_check(page)
 
     # --- Monitor de conexión a la BD ---
-    _db_alert: ft.AlertDialog | None = None
-    _db_ok_alert: ft.AlertDialog | None = None
+    # Sin diálogos bloqueantes: el estado se refleja en un punto de color junto
+    # al botón de tema (ConnectionStatusDot), para que la app no dé la
+    # impresión de estar trabada cuando la BD se cae.
+    _status_dot: ConnectionStatusDot | None = None
 
-    def _show_lost_popup() -> None:
-        nonlocal _db_alert
-        # No duplicar si ya está abierto
-        if _db_alert is not None and _db_alert.open:
-            return
-
-        def _dismiss(_: ft.ControlEvent) -> None:
-            _db_alert.open = False
-            page.update()
-
-        _db_alert = ft.AlertDialog(
-            modal=False,
-            title=ft.Row([
-                ft.Icon(ft.Icons.WIFI_OFF, color=ft.Colors.ERROR),
-                ft.Text("Sin conexión a la base de datos"),
-            ]),
-            content=ft.Text(
-                "Se perdió la conexión con el servidor SQL Server.\n"
-                "Verificando reconexión automáticamente…"
-            ),
-            actions=[ft.TextButton("Cerrar", on_click=_dismiss)],
-            actions_alignment=ft.MainAxisAlignment.END,
-        )
-        if _db_alert not in page.overlay:
-            page.overlay.append(_db_alert)
-        _db_alert.open = True
-        page.update()
-
-    def _show_restored_popup() -> None:
-        nonlocal _db_ok_alert
-
-        def _dismiss(_: ft.ControlEvent) -> None:
-            _db_ok_alert.open = False
-            page.update()
-
-        _db_ok_alert = ft.AlertDialog(
-            modal=False,
-            title=ft.Row([
-                ft.Icon(ft.Icons.WIFI, color=ft.Colors.GREEN_600),
-                ft.Text("Conexión restaurada"),
-            ]),
-            content=ft.Text("La conexión con SQL Server se ha restablecido correctamente."),
-            actions=[ft.TextButton("Cerrar", on_click=_dismiss)],
-            actions_alignment=ft.MainAxisAlignment.END,
-        )
-        if _db_ok_alert not in page.overlay:
-            page.overlay.append(_db_ok_alert)
-        _db_ok_alert.open = True
-        page.update()
+    def _update_status_dot(connected: bool) -> None:
+        if _status_dot is not None:
+            _status_dot.set_connected(connected)
 
     def _on_connection_lost() -> None:
-        _show_lost_popup()
+        _update_status_dot(False)
+
+    def _flush_offline_outbox() -> None:
+        def _run() -> None:
+            try:
+                from app.services.historial_nomina_service import HistorialNominaService
+                flushed, remaining = HistorialNominaService().flush_pendientes()
+                if flushed:
+                    print(f"[offline] {flushed} registro(s) de nómina sincronizados; {remaining} pendientes.")
+            except Exception as exc:
+                print(f"[offline] Error al sincronizar outbox de nómina: {exc}")
+
+        import threading
+        threading.Thread(target=_run, daemon=True).start()
 
     def _on_connection_restored() -> None:
-        nonlocal _db_alert
-        # Cierra el popup de error si sigue abierto
-        if _db_alert is not None and _db_alert.open:
-            _db_alert.open = False
-            page.update()
-        _show_restored_popup()
+        _update_status_dot(True)
+        _flush_offline_outbox()
 
     def _on_db_operation_error() -> None:
-        # Solo re-muestra el popup si el monitor ya sabe que no hay conexión
-        # o si get_connection acaba de fallar (lo que implica que no hay conexión)
-        _show_lost_popup()
+        _update_status_dot(False)
 
     _monitor = ConnectionMonitor(
         on_lost=_on_connection_lost,
@@ -397,6 +367,12 @@ def main(page: ft.Page):
             required_permission=PERM_UTILIDADES_VIEW,
         )
         registry.register(
+            UnirPdfView,
+            icon=ft.Icons.MERGE_TYPE_OUTLINED,
+            selected_icon=ft.Icons.MERGE_TYPE,
+            required_permission=PERM_UTILIDADES_VIEW,
+        )
+        registry.register(
             ImportarCorreosNominaView,
             icon=ft.Icons.MARK_EMAIL_READ_OUTLINED,
             selected_icon=ft.Icons.MARK_EMAIL_READ,
@@ -447,12 +423,14 @@ def main(page: ft.Page):
             return
 
         # --- Layout principal (placeholder hasta que el router cargue la primera sección) ---
+        nonlocal _status_dot
+        _status_dot = ConnectionStatusDot(connected=_monitor.is_connected)
         placeholder = ft.Container(expand=True)
         layout = MainLayout(
             title="",
             subtitle="",
             content=placeholder,
-            actions=[ThemeToggleButton(page)],
+            actions=[_status_dot, ThemeToggleButton(page)],
             fill_viewport=False,
         )
 
@@ -495,7 +473,7 @@ def main(page: ft.Page):
         # ProfileView se accede por el botón "Perfil" del footer, no como ítem de nav.
         _group_keys = {RolesProveedoresView.key, ProveedoresView.key}
         _nomina_keys = {NominaEnvioView.key, NominaHistorialView.key}
-        _utilidades_keys = {SepararPdfView.key, ComprimirPdfView.key, ImportarCorreosNominaView.key}
+        _utilidades_keys = {SepararPdfView.key, ComprimirPdfView.key, UnirPdfView.key, ImportarCorreosNominaView.key}
         _hidden_keys = {ProfileView.key}
         _regular_items = []
         _alertas_items = []

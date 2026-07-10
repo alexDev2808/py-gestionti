@@ -233,7 +233,20 @@ class NominaHistorialView(View):
             ft.Container(
                 expand=True,
                 padding=ft.padding.symmetric(horizontal=10, vertical=8),
-                content=ft.Text(item.estatus, size=12, color=color, weight=ft.FontWeight.W_600),
+                content=ft.Row(
+                    spacing=4,
+                    tight=True,
+                    controls=[
+                        ft.Text(item.estatus, size=12, color=color, weight=ft.FontWeight.W_600),
+                        ft.Icon(
+                            ft.Icons.SYNC_PROBLEM,
+                            size=14,
+                            color=ft.Colors.ORANGE_700,
+                            tooltip="Pendiente de sincronizar (sin conexión al registrar)",
+                            visible=item.pendiente_sync,
+                        ),
+                    ],
+                ),
             ),
             ft.Container(
                 expand=True,

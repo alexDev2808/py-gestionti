@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from typing import Optional
 
+from app.config.database import test_connection
 from app.config.settings import settings
 from app.dto.Areas.areas_nomina_config_update_dto import AreasNominaConfigUpdateDTO
 from app.dto.Areas.areas_response_dto import AreasResponseDTO
+from app.repositories.offline_nomina_repository import OfflineNominaRepository
 from app.repositories.personal_repository import PersonalRepository
 from app.services.areas_service import AreasService
 from app.services.historial_nomina_service import HistorialNominaService
@@ -21,11 +23,13 @@ class NominaController:
         nomina_service: Optional[NominaService] = None,
         historial_service: Optional[HistorialNominaService] = None,
         personal_repo: Optional[PersonalRepository] = None,
+        offline_repo: Optional[OfflineNominaRepository] = None,
     ):
         self._areas_service = areas_service or AreasService()
         self._nomina_service = nomina_service or NominaService()
         self._historial_service = historial_service or HistorialNominaService()
         self._personal_repo = personal_repo or PersonalRepository()
+        self._offline = offline_repo or OfflineNominaRepository()
 
     # ------------------------------------------------------------------ #
     # Áreas                                                               #
@@ -108,10 +112,20 @@ class NominaController:
     # Escaneo de carpeta                                                   #
     # ------------------------------------------------------------------ #
 
-    def escanear(self, area: AreasResponseDTO, anio: int, num_semana: int) -> list[NominaItem]:
+    def escanear(
+        self,
+        area: AreasResponseDTO,
+        anio: int,
+        num_semana: int,
+        allow_offline_fallback: bool = False,
+    ) -> tuple[list[NominaItem], bool]:
         """
         Lee la carpeta de CFDIs, empareja archivos con empleados de la BD
         y devuelve la lista de NominaItem con su estado.
+
+        Si `allow_offline_fallback` es True y la BD remota no responde, resuelve
+        empleados desde la caché local (`personal_cache`) en vez de fallar.
+        Retorna (items, uso_cache).
         """
         if not area.ruta_cfdi or not area.prefijo_carpeta:
             raise ValueError("El área no tiene configurada la ruta de CFDIs.")
@@ -123,6 +137,12 @@ class NominaController:
 
         es_logym = "logym" in area.nombre.lower()
         es_taurus = "taurus" in area.nombre.lower()
+
+        conexion_viva = True
+        if allow_offline_fallback:
+            conexion_viva, _ = test_connection()
+
+        uso_cache = False
         items: list[NominaItem] = []
         for pdf_path, xml_path, num_empleado in pares:
             # Logym: 141 → 0141L  |  Taurus: 141 → 0141T  |  otros: 141 → 141
@@ -132,8 +152,27 @@ class NominaController:
                 num_empleado_db = f"{num_empleado.zfill(4)}T"
             else:
                 num_empleado_db = num_empleado
-            personal = self._personal_repo.get_by_num_empleado(num_empleado_db)
-            if not personal:
+
+            resultado: Optional[tuple[str, str]] = None
+
+            if conexion_viva:
+                try:
+                    personal = self._personal_repo.get_by_num_empleado(num_empleado_db)
+                except Exception:
+                    conexion_viva = False
+                else:
+                    if personal:
+                        nombre = f"{personal.nombres} {personal.apellido_paterno} {personal.apellido_materno}".strip()
+                        resultado = (nombre, personal.correo_nomina or "")
+
+            if resultado is None and not conexion_viva and allow_offline_fallback:
+                cached = self._offline.get_cached_personal(num_empleado_db)
+                if cached:
+                    uso_cache = True
+                    nombre = f"{cached.nombres} {cached.apellido_paterno} {cached.apellido_materno}".strip()
+                    resultado = (nombre, cached.correo_nomina or "")
+
+            if resultado is None:
                 items.append(NominaItem(
                     num_empleado=num_empleado_db,
                     nombre_empleado="(no encontrado en BD)",
@@ -148,8 +187,7 @@ class NominaController:
                 ))
                 continue
 
-            nombre = f"{personal.nombres} {personal.apellido_paterno} {personal.apellido_materno}".strip()
-            correo_envio = personal.correo_nomina or ""
+            nombre, correo_envio = resultado
 
             if not xml_path:
                 estado = "sin_xml"
@@ -174,7 +212,10 @@ class NominaController:
         # Sin correo primero, luego listos, después errores
         _orden = {"sin_correo": 0, "listo": 1, "sin_xml": 2, "sin_empleado": 3}
         items.sort(key=lambda i: _orden.get(i.estado, 9))
-        return items
+        return items, uso_cache
+
+    def contar_pendientes_outbox(self) -> int:
+        return self._historial_service.contar_pendientes()
 
     # ------------------------------------------------------------------ #
     # Edición de correo del empleado                                       #

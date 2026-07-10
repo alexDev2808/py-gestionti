@@ -15,6 +15,7 @@ from app.components.nomina_plantilla_modal import NominaPlantillaModal
 from app.controllers.nomina_controller import NominaController
 from app.dto.Areas.areas_response_dto import AreasResponseDTO
 from app.services.nomina_service import NominaItem, NominaService
+from app.services.permissions import PERM_NOMINA_SEND
 from app.views.base import View
 
 
@@ -31,6 +32,7 @@ class NominaEnvioView(View):
         self._enviando = False
         # Reenvíos individuales en curso (por num_empleado), independientes del envío masivo.
         self._reenvios_en_curso: set[str] = set()
+        self._uso_cache_ultimo_escaneo = False
         self._modal: Optional[NominaConfigModal] = None
         self._plantilla_modal: Optional[NominaPlantillaModal] = None
 
@@ -93,6 +95,8 @@ class NominaEnvioView(View):
 
         # Banner de sin correo
         self._banner_sin_correo = ft.Container(visible=False)
+        # Banner de trabajo sin conexión (caché local / envíos pendientes de sincronizar)
+        self._banner_offline = ft.Container(visible=False)
 
         # Tabla de preview
         self._rows_container = ft.ListView(expand=True, spacing=0)
@@ -162,6 +166,7 @@ class NominaEnvioView(View):
                     self._progress,
                     self._status_text,
                     self._banner_sin_correo,
+                    self._banner_offline,
                     ft.Row(controls=[self._tf_buscar]),
                     self._table_container,
                     ft.Row(
@@ -422,6 +427,7 @@ class NominaEnvioView(View):
         self._table_container.visible = False
         self._btn_enviar.visible = False
         self._banner_sin_correo.visible = False
+        self._banner_offline.visible = False
         self._safe_update()
 
         svc = NominaService()
@@ -461,8 +467,12 @@ class NominaEnvioView(View):
                                 )
                                 self._safe_update()
 
-                items = await asyncio.to_thread(self._ctrl.escanear, area, anio, semana)
+                allow_offline = self.can(PERM_NOMINA_SEND)
+                items, uso_cache = await asyncio.to_thread(
+                    self._ctrl.escanear, area, anio, semana, allow_offline
+                )
                 self._items = items
+                self._uso_cache_ultimo_escaneo = uso_cache
                 self._render_resultados(items)
             except FileNotFoundError as exc:
                 self._set_status(f"Carpeta no encontrada: {exc}")
@@ -472,6 +482,7 @@ class NominaEnvioView(View):
                 self._items = []
             finally:
                 self._set_progress(False)
+                self._actualizar_banner_offline()
             self._safe_update()
 
         try:
@@ -542,6 +553,38 @@ class NominaEnvioView(View):
             self._btn_enviar.visible = True
         else:
             self._btn_enviar.visible = False
+
+    def _actualizar_banner_offline(self) -> None:
+        pendientes = self._ctrl.contar_pendientes_outbox()
+        if not self._uso_cache_ultimo_escaneo and not pendientes:
+            self._banner_offline.visible = False
+            return
+
+        mensajes = []
+        if self._uso_cache_ultimo_escaneo:
+            mensajes.append("Datos de empleados obtenidos del caché local (sin conexión a la BD).")
+        if pendientes:
+            plural = "s" if pendientes != 1 else ""
+            mensajes.append(f"{pendientes} envío{plural} pendiente{plural} de sincronizar.")
+
+        self._banner_offline.visible = True
+        self._banner_offline.content = ft.Container(
+            bgcolor=ft.Colors.ORANGE_50,
+            border=ft.border.all(1, ft.Colors.ORANGE_300),
+            border_radius=8,
+            padding=12,
+            content=ft.Row(
+                spacing=8,
+                controls=[
+                    ft.Icon(ft.Icons.CLOUD_OFF, color=ft.Colors.ORANGE_700, size=18),
+                    ft.Text(
+                        " ".join(mensajes),
+                        size=13,
+                        color=ft.Colors.ORANGE_900,
+                    ),
+                ],
+            ),
+        )
 
     # ------------------------------------------------------------------ #
     # Buscador                                                             #
@@ -693,6 +736,7 @@ class NominaEnvioView(View):
                 self._set_status(f"{msg}\nÚltimo error: {ultimo_error}")
                 self._mostrar_error_detalle(ultimo_error)
 
+            self._actualizar_banner_offline()
             self._safe_update()
             try:
                 _notif.notify(
@@ -836,6 +880,7 @@ class NominaEnvioView(View):
             except Exception:
                 pass
 
+            self._actualizar_banner_offline()
             self._safe_update()
 
         threading.Thread(target=_send, daemon=True).start()

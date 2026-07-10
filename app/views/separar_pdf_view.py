@@ -448,8 +448,8 @@ class SepararPdfView(View):
         else:
             abrev = self._abrev_actual()
             ejemplos = []
-            for t in self._titulares[:3]:
-                titular = t or "Sin_titular"
+            for i, t in enumerate(self._titulares[:3]):
+                titular = t or f"pag{i + 1}"
                 ejemplos.append(f"{abrev}_{titular}.pdf")
             self._lbl_preview.value = "  ·  ".join(ejemplos)
         try:
