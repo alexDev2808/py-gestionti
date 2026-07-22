@@ -88,11 +88,65 @@ class NominaHistorialView(View):
             height=450,
         )
 
+        # Paginación
+        self._page_info = ft.Text("Página 0 de 0", size=12, color=ft.Colors.ON_SURFACE_VARIANT)
+        self._btn_first = ft.IconButton(
+            icon=ft.Icons.FIRST_PAGE, tooltip="Primera",
+            on_click=lambda _: self._goto_page(0),
+        )
+        self._btn_prev = ft.IconButton(
+            icon=ft.Icons.CHEVRON_LEFT, tooltip="Anterior",
+            on_click=lambda _: self._goto_page(self._ctrl.page_index - 1),
+        )
+        self._btn_next = ft.IconButton(
+            icon=ft.Icons.CHEVRON_RIGHT, tooltip="Siguiente",
+            on_click=lambda _: self._goto_page(self._ctrl.page_index + 1),
+        )
+        self._btn_last = ft.IconButton(
+            icon=ft.Icons.LAST_PAGE, tooltip="Última",
+            on_click=lambda _: self._goto_page(self._ctrl.total_pages() - 1),
+        )
+        self._page_size_dd = ft.Dropdown(
+            width=110,
+            value=str(self._ctrl.page_size),
+            options=[ft.dropdown.Option(str(n)) for n in self._ctrl.page_size_options],
+        )
+        self._page_size_dd.on_change = self._on_page_size_change
+
     # ------------------------------------------------------------------ #
     # Build                                                                #
     # ------------------------------------------------------------------ #
 
     def build(self) -> ft.Control:
+        pagination_bar = ft.Container(
+            padding=ft.padding.symmetric(horizontal=8, vertical=6),
+            content=ft.Row(
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                controls=[
+                    ft.Row(
+                        spacing=6,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        controls=[
+                            ft.Text("Filas por página:", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                            self._page_size_dd,
+                        ],
+                    ),
+                    ft.Row(
+                        spacing=2,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        controls=[
+                            self._page_info,
+                            self._btn_first,
+                            self._btn_prev,
+                            self._btn_next,
+                            self._btn_last,
+                        ],
+                    ),
+                ],
+            ),
+        )
+
         self._table_container.content = ft.Column(
             expand=True,
             spacing=0,
@@ -105,6 +159,8 @@ class NominaHistorialView(View):
                     spacing=0,
                     controls=[self._rows_container],
                 ),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+                pagination_bar,
             ],
         )
 
@@ -183,7 +239,7 @@ class NominaHistorialView(View):
                     self._ctrl.fetch_items, razon, anio, semana, estatus
                 )
                 self._ctrl.set_all_items(items)
-                self._rows_container.controls = [self._build_row(i) for i in items]
+                self._render_page()
                 self._set_status(f"{len(items)} registros.")
             except Exception as exc:
                 self._set_status(f"Error: {exc}")
@@ -195,6 +251,38 @@ class NominaHistorialView(View):
             asyncio.run_coroutine_threadsafe(_load(), asyncio.get_event_loop())
         except RuntimeError:
             self.page.run_task(_load)
+
+    # ------------------------------------------------------------------ #
+    # Paginación                                                           #
+    # ------------------------------------------------------------------ #
+
+    def _on_page_size_change(self, e: ft.ControlEvent) -> None:
+        try:
+            new_size = int(e.control.value)
+        except (TypeError, ValueError):
+            return
+        if self._ctrl.set_page_size(new_size):
+            self._render_page()
+
+    def _goto_page(self, index: int) -> None:
+        if self._ctrl.goto_page(index):
+            self._render_page()
+
+    def _render_page(self) -> None:
+        page_items = self._ctrl.current_page_items()
+        self._rows_container.controls = [self._build_row(i) for i in page_items]
+
+        total = self._ctrl.total_pages()
+        idx = self._ctrl.page_index
+        self._page_info.value = f"Página {idx + 1} de {total}"
+        at_start = idx <= 0
+        at_end = idx >= total - 1
+        self._btn_first.disabled = at_start
+        self._btn_prev.disabled = at_start
+        self._btn_next.disabled = at_end
+        self._btn_last.disabled = at_end
+
+        self._safe_update()
 
     # ------------------------------------------------------------------ #
     # Tabla                                                                #
